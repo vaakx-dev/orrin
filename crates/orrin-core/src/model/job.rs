@@ -87,6 +87,7 @@ pub struct Artifact {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Manifest {
+    pub ignore: Vec<String>,
     pub recipes: BTreeMap<String, Recipe>,
 }
 
