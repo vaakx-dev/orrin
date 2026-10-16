@@ -36,9 +36,8 @@ async fn advance(hub: &Services, project: &ProjectId, landed: Option<&View>, mai
             Ok(paths) if paths.is_empty() => {}
             Ok(paths) => {
                 if view.kind == ViewKind::User {
-                    skipped.extend(paths.iter().cloned());
+                    skipped.extend(paths);
                 }
-                hub.events.emit(Event::ViewSkipped { view: view.id.clone(), paths });
             }
             Err(err) => tracing::warn!(view = %view.id, "could not advance view: {err}"),
         }

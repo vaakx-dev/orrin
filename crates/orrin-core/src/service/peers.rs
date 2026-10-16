@@ -6,7 +6,7 @@ use crate::api::{
     SyncAnnounce, SyncChanges, SyncChangesOutput, SyncGet, SyncMissing, SyncPair, SyncPairOutput, SyncPut,
 };
 use crate::error::Result;
-use crate::id::PcId;
+use crate::id::{Hash, PcId};
 use crate::model::{Pc, PcSettings};
 use crate::service::Service;
 
@@ -24,6 +24,8 @@ pub trait Peers: Service {
     async fn changes(&self, input: SyncChanges) -> Result<SyncChangesOutput>;
     async fn authorize(&self, pc: &PcId, key: &str) -> bool;
     async fn call(&self, pc: &PcId, request: &str, body: Value) -> Result<Value>;
+    async fn pull(&self, pc: &PcId, hashes: Vec<Hash>) -> Result<()>;
+    async fn push(&self, pc: &PcId, hashes: Vec<Hash>) -> Result<()>;
 }
 
 pub async fn call_peer<R: Request>(peers: &dyn Peers, pc: &PcId, input: R) -> Result<R::Output> {

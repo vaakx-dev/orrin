@@ -55,7 +55,8 @@ impl Projects for FakeProjects {
         if project.main != change.parent {
             return Err(Error::conflict("main moved"));
         }
-        project.main = change.snapshot;
+        project.main = change.snapshot.clone();
+        self.changes.lock().unwrap().push(change);
         Ok(project.clone())
     }
 

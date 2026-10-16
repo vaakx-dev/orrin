@@ -8,7 +8,7 @@ use orrin_core::api::{
 };
 use orrin_core::model::{Pc, PcSettings};
 use orrin_core::service::{Hub, Peers, Service, Setup};
-use orrin_core::{Config, Error, Events, Home, Identity, PcId, Result};
+use orrin_core::{Config, Error, Events, Hash, Home, Identity, PcId, Result};
 use serde_json::Value;
 
 use crate::book::Book;
@@ -104,5 +104,13 @@ impl Peers for PeerService {
 
     async fn call(&self, pc: &PcId, request: &str, body: Value) -> Result<Value> {
         self.0.call(pc, request, body).await
+    }
+
+    async fn pull(&self, pc: &PcId, hashes: Vec<Hash>) -> Result<()> {
+        self.0.pull(pc, hashes).await
+    }
+
+    async fn push(&self, pc: &PcId, hashes: Vec<Hash>) -> Result<()> {
+        self.0.push(pc, hashes).await
     }
 }

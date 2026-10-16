@@ -1,5 +1,3 @@
-mod transfer;
-
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -28,13 +26,14 @@ pub async fn place(ctx: &Context, plan: &Plan, asked: Option<&PcId>) -> Result<P
     let names = plan.tools();
     let known = tools::all_known(&tools::resolve(&ctx.hub, &names).await);
     let gpu = !plan.needs_gpu() || ctx.config.builds.gpu > 0;
-    if ctx.config.pc.builds && known && gpu {
+    let builds = ctx.builds_on().await;
+    if builds && known && gpu {
         return Ok(Place::Local);
     }
     if let Some(pc) = pick(ctx, &names).await {
         return Ok(Place::Peer(pc));
     }
-    match ctx.config.pc.builds {
+    match builds {
         true => Ok(Place::Local),
         false => Err(Error::unavailable(format!("builds are off on this PC and no paired PC can run {}", plan.name))),
     }
@@ -82,7 +81,7 @@ impl Follow {
         self.ctx.table.log(&self.id, Stream::System, format!("running on {}", self.pc));
         let mut hashes = vec![self.plan.snapshot_id.clone()];
         hashes.extend(self.plan.snapshot.entries.iter().map(|e| e.hash.clone()));
-        transfer::push(&self.ctx.hub, &self.pc, hashes).await?;
+        self.ctx.hub.peers.push(&self.pc, hashes).await?;
         let request = SyncJob {
             kind: self.plan.kind,
             project: self.plan.project.clone(),
@@ -122,10 +121,10 @@ impl Follow {
     }
 
     async fn fetch(&self, result: &Hash) -> Result<()> {
-        transfer::pull(&self.ctx.hub, &self.pc, vec![result.clone()]).await?;
+        self.ctx.hub.peers.pull(&self.pc, vec![result.clone()]).await?;
         let result: JobResult = serde_json::from_slice(&self.ctx.hub.store.get(result)?)?;
         let hashes = result.artifacts.iter().map(|a| a.hash.clone()).collect();
-        transfer::pull(&self.ctx.hub, &self.pc, hashes).await?;
+        self.ctx.hub.peers.pull(&self.pc, hashes).await?;
         self.ctx.table.replay(&self.id, result.logs);
         self.ctx.table.set_artifacts(&self.id, result.artifacts);
         Ok(())

@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use orrin_core::api::{Event, ProjectOpened, ProjectsImport, ViewCreate};
+use orrin_core::api::{ProjectOpened, ProjectsImport, ViewCreate};
 use orrin_core::model::{Entry, Project, Snapshot, View, ViewKind, ViewState};
 use orrin_core::service::{Edits, Store};
 use orrin_core::{Error, ProjectId, Result, ViewId, now_ms};
@@ -30,7 +30,6 @@ impl Inner {
             created_at: now_ms(),
         };
         self.hub.projects.save(project.clone()).await?;
-        self.events.emit(Event::ProjectCreated { project: project.clone() });
         let view = self.open_view(user_view(&project, root), stats)?;
         let paths: Vec<String> = snapshot.entries.into_iter().map(|e| e.path).collect();
         if let Err(err) = self.hub.index.touched(&project.id, None, &paths).await {

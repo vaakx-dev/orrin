@@ -31,10 +31,7 @@ pub async fn commit(hub: &Services, proposal: &Proposal) -> Result<LandOutput> {
             undoes: proposal.undoes.clone(),
         };
         match hub.projects.swap_main(change.clone()).await {
-            Ok(_) => {
-                hub.projects.append(vec![change.clone()]).await?;
-                return Ok(output(snapshot, Some(change), Vec::new()));
-            }
+            Ok(_) => return Ok(output(snapshot, Some(change), Vec::new())),
             Err(err) if err.code == ErrorCode::Conflict => continue,
             Err(err) => return Err(err),
         }

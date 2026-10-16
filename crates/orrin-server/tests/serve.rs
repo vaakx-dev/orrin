@@ -26,8 +26,8 @@ async fn serves_typed_requests() {
     assert_eq!(pong["ok"], true);
     assert!(pong["result"]["pc"].as_str().unwrap().starts_with("pc_"));
 
-    let stub = post(port, "read", json!({ "project": "p_1", "path": "a.txt" })).await;
-    assert_eq!(stub["error"]["code"], "unavailable");
+    let unknown = post(port, "read", json!({ "project": "p_1", "path": "a.txt" })).await;
+    assert_eq!(unknown["error"]["code"], "not_found");
 
     let bad = post(port, "read", json!({ "project": "p_1", "path": "a.txt", "extra": 1 })).await;
     assert_eq!(bad["error"]["code"], "invalid");

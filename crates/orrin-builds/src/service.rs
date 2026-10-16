@@ -56,7 +56,7 @@ impl Builds for BuildService {
                 false => self.ctx.table.job(&job),
             };
         }
-        if !self.ctx.config.pc.builds {
+        if !self.ctx.builds_on().await {
             return Err(Error::unavailable("builds are off on this PC"));
         }
         let store = &*self.ctx.hub.store;

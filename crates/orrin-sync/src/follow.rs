@@ -56,12 +56,8 @@ impl Inner {
         if !fresh.is_empty() {
             self.hub.projects.append(fresh).await?;
         }
-        match (local, last) {
-            (None, _) => self.events.emit(Event::ProjectCreated { project: theirs.clone() }),
-            (Some(_), Some(change)) if moved => {
-                self.events.emit(Event::MainMoved { project: theirs.id.clone(), main: theirs.main.clone(), change })
-            }
-            _ => {}
+        if let Some(change) = last.filter(|_| moved) {
+            self.events.emit(Event::MainMoved { project: theirs.id.clone(), main: theirs.main.clone(), change });
         }
         let paths: Vec<String> = paths.into_iter().collect();
         if let Err(err) = self.hub.index.touched(&theirs.id, None, &paths).await {
@@ -75,10 +71,8 @@ impl Inner {
         let Ok(list) = self.hub.views.list(ViewList { project: Some(project.id.clone()) }).await else { return };
         let open = list.views.into_iter().filter(|v| v.kind == ViewKind::User && v.state == ViewState::Open);
         for view in open {
-            match self.hub.views.advance(&view.id, &project.main).await {
-                Ok(paths) if !paths.is_empty() => self.events.emit(Event::ViewSkipped { view: view.id, paths }),
-                Ok(_) => {}
-                Err(err) => tracing::warn!(%err, view = %view.id, "user's folder not updated"),
+            if let Err(err) = self.hub.views.advance(&view.id, &project.main).await {
+                tracing::warn!(%err, view = %view.id, "user's folder not updated");
             }
         }
     }

@@ -26,7 +26,6 @@ async fn clean_land_moves_main_and_advances_the_user_view() {
     assert_eq!(rig.views.view(&user).base, rig.main());
     let events = rig.events();
     assert!(events.iter().any(|e| matches!(e, Event::ViewLanded { view, .. } if *view == worker)));
-    assert!(events.iter().any(|e| matches!(e, Event::ViewSkipped { view, .. } if *view == user)));
 }
 
 #[tokio::test]

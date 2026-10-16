@@ -66,7 +66,7 @@ impl Lander {
         if project.home_pc == self.hub.me.pc {
             return commit::commit(&self.hub, &proposal).await;
         }
-        remote::push(&self.hub, &project.home_pc, proposal.hashes()).await?;
+        self.hub.peers.push(&project.home_pc, proposal.hashes()).await?;
         remote::forward(&self.hub, &project.home_pc, proposal.into_sync()).await
     }
 }
