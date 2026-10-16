@@ -18,7 +18,7 @@ pub fn fresh(runs: &Path, id: &JobId) -> Result<PathBuf> {
 
 pub fn fill(store: &dyn Store, dir: &Path, files: &[Entry], big: u64) -> Result<()> {
     let placed = par_map(files, |entry| {
-        let how = if entry.size > big { Materialise::Link } else { Materialise::Copy };
+        let how = if entry.size > big && entry.shareable() { Materialise::Link } else { Materialise::Copy };
         write(store, dir, entry, how).map(drop)
     });
     placed.into_iter().collect()

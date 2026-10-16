@@ -20,8 +20,8 @@ impl Inner {
     pub fn write_entry(&self, kind: ViewKind, root: &Path, entry: &Entry) -> Result<Metadata> {
         let abs = root.join(&entry.path);
         remove_if_present(&abs)?;
-        let how = match (kind, entry.mode) {
-            (ViewKind::Worker, Mode::File) => Materialise::Link,
+        let how = match kind {
+            ViewKind::Worker if entry.shareable() => Materialise::Link,
             _ => Materialise::Copy,
         };
         self.hub.store.materialise(&entry.hash, &abs, how)?;

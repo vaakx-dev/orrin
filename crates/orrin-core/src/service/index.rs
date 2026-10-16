@@ -1,6 +1,8 @@
 use async_trait::async_trait;
 
-use crate::api::{Find, FindOutput, Outline, OutlineOutput, Read, ReadOutput, Search, SearchOutput, Where, WhereOutput};
+use crate::api::{
+    Find, FindOutput, Outline, OutlineOutput, Read, ReadOutput, Search, SearchOutput, Where, WhereOutput,
+};
 use crate::clock::Clock;
 use crate::error::{Error, Result};
 use crate::id::{ProjectId, ViewId};

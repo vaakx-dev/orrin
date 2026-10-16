@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use orrin_core::api::*;
-use orrin_core::model::{Change, FileStatus, View, ViewState};
+use orrin_core::model::{Change, FileStatus, SHARE_FROM, View, ViewState};
 use orrin_core::service::Projects;
 use orrin_core::{ChangeId, ProjectId, now_ms};
 
@@ -101,20 +101,23 @@ async fn worker_edits_show_in_changes_and_diff() {
 }
 
 #[tokio::test]
-async fn worker_files_are_shared_links_until_written() {
+async fn worker_views_link_big_binaries_and_copy_text() {
     let rig = Rig::new(1 << 20);
-    let opened = import(&rig, &[("big.txt", "0123456789abcdef\n")]).await;
+    let blob = format!("0123{}\n", "x".repeat(SHARE_FROM as usize));
+    let opened = import(&rig, &[("big.bin", &blob), ("main.rs", "fn main() {}\n")]).await;
     let project = opened.project.id.clone();
     let view = worker(&rig, &project).await;
-    let file = view.path.join("big.txt");
+    let source = view.path.join("main.rs");
+    std::fs::OpenOptions::new().write(true).open(&source).unwrap();
+    let file = view.path.join("big.bin");
     assert!(std::fs::metadata(&file).unwrap().permissions().readonly());
 
-    rig.views.patch(edit(&project, &view, "big.txt", "0123", "XXXX")).await.unwrap();
+    rig.views.patch(edit(&project, &view, "big.bin", "0123", "XXXX")).await.unwrap();
     assert!(!std::fs::metadata(&file).unwrap().permissions().readonly());
-    assert_eq!(std::fs::read_to_string(&file).unwrap(), "XXXX456789abcdef\n");
+    assert!(std::fs::read_to_string(&file).unwrap().starts_with("XXXXxx"));
     let entry = rig.hub.store.snapshot(&opened.project.main).unwrap().entries[0].clone();
     let store_copy = rig.dir.path().join("links").join(entry.hash.as_str());
-    assert_eq!(std::fs::read_to_string(store_copy).unwrap(), "0123456789abcdef\n");
+    assert!(std::fs::read_to_string(store_copy).unwrap().starts_with("0123xx"));
 }
 
 #[tokio::test]

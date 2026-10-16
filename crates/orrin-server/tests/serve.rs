@@ -1,5 +1,7 @@
 mod daemon;
 
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD;
 use daemon::Daemon;
 use orrin_core::daemon::DaemonInfo;
 use serde_json::json;
@@ -29,6 +31,29 @@ async fn serves_typed_requests() {
 
     daemon.stop().await;
     assert!(DaemonInfo::read(&home).is_err());
+}
+
+#[tokio::test]
+async fn objects_get_returns_whole_big_files() {
+    let daemon = Daemon::start().await;
+    let folder = tempfile::tempdir().unwrap();
+    let mut seed = 7u32;
+    let bytes: Vec<u8> = (0..3 << 20)
+        .map(|_| {
+            seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            (seed >> 24) as u8
+        })
+        .collect();
+    std::fs::write(folder.path().join("shot.png"), &bytes).unwrap();
+    let opened = daemon.call("projects.import", json!({ "path": folder.path() })).await;
+    let project = &opened["result"]["project"]["id"];
+    let read = daemon.call("read", json!({ "project": project, "path": "shot.png" })).await;
+    let hash = &read["result"]["hash"];
+
+    let object = daemon.call("objects.get", json!({ "hash": hash })).await;
+    let data = STANDARD.decode(object["result"]["data"].as_str().unwrap()).unwrap();
+    assert!(data == bytes);
+    daemon.stop().await;
 }
 
 #[tokio::test]

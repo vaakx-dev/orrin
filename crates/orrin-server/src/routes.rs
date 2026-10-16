@@ -1,3 +1,6 @@
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD;
+use orrin_core::Error;
 use orrin_core::api::{self, Pong};
 use orrin_core::service::Hub;
 
@@ -8,6 +11,7 @@ pub fn registry() -> Registry {
     meta(&mut r);
     projects(&mut r);
     files(&mut r);
+    objects(&mut r);
     index(&mut r);
     views(&mut r);
     jobs(&mut r);
@@ -45,6 +49,16 @@ fn files(r: &mut Registry) {
     r.add(|h: Hub, i: api::Delete| async move { h.views.delete(i).await });
     r.add(|h: Hub, i: api::Changes| async move { h.views.changes(i).await });
     r.add(|h: Hub, i: api::Diff| async move { h.views.diff(i).await });
+}
+
+fn objects(r: &mut Registry) {
+    r.add(|h: Hub, i: api::ObjectsGet| async move {
+        let hash = i.hash.clone();
+        let bytes = tokio::task::spawn_blocking(move || h.store.get(&i.hash))
+            .await
+            .map_err(|err| Error::internal(err.to_string()))??;
+        Ok(api::Object { hash, data: STANDARD.encode(bytes) })
+    });
 }
 
 fn index(r: &mut Registry) {

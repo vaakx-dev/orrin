@@ -5,6 +5,7 @@ mod git;
 mod index;
 mod jobs;
 mod meta;
+mod objects;
 mod pcs;
 mod projects;
 mod request;
@@ -18,6 +19,7 @@ pub use git::*;
 pub use index::*;
 pub use jobs::*;
 pub use meta::*;
+pub use objects::*;
 pub use pcs::*;
 pub use projects::*;
 pub use request::Request;
@@ -37,6 +39,7 @@ requests! {
     Find => "find": FindOutput,
     Search => "search": SearchOutput,
     Read => "read": ReadOutput,
+    ObjectsGet => "objects.get": Object,
     Outline => "outline": OutlineOutput,
     Where => "where": WhereOutput,
     Changes => "changes": ChangesOutput,
