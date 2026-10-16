@@ -7,3 +7,8 @@ license.workspace = true
 
 [dependencies]
 orrin-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+similar.workspace = true
+zip.workspace = true
+quick-xml.workspace = true
