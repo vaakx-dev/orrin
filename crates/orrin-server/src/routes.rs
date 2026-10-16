@@ -90,6 +90,7 @@ fn sync(r: &mut Registry) {
     r.add(|h: Hub, i: api::SyncGet| async move { h.peers.objects(i).await });
     r.add(|h: Hub, i: api::SyncPut| async move { h.peers.receive(i).await });
     r.add(|h: Hub, i: api::SyncChanges| async move { h.peers.changes(i).await });
+    r.add(|h: Hub, i: api::SyncPoke| async move { h.peers.poke(i).await });
     r.add(|h: Hub, i: api::SyncLand| async move { h.landing.land_change(i).await });
     r.add(|h: Hub, i: api::SyncJob| async move { h.builds.accept(i).await });
     r.add(|h: Hub, _: api::SyncFacts| async move { h.facts.list(api::Facts::default()).await });

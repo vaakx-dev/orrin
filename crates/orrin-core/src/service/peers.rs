@@ -2,8 +2,8 @@ use async_trait::async_trait;
 use serde_json::Value;
 
 use crate::api::{
-    Hashes, Objects, PcsList, PcsListOutput, PcsPair, PcsPairOutput, PcsRedeem, PcsSettings, Request, Stored,
-    SyncAnnounce, SyncChanges, SyncChangesOutput, SyncGet, SyncMissing, SyncPair, SyncPairOutput, SyncPut,
+    Done, Hashes, Objects, PcsList, PcsListOutput, PcsPair, PcsPairOutput, PcsRedeem, PcsSettings, Request, Stored,
+    SyncAnnounce, SyncChanges, SyncChangesOutput, SyncGet, SyncMissing, SyncPair, SyncPairOutput, SyncPoke, SyncPut,
 };
 use crate::error::Result;
 use crate::id::{Hash, PcId, ProjectId};
@@ -22,6 +22,7 @@ pub trait Peers: Service {
     async fn objects(&self, input: SyncGet) -> Result<Objects>;
     async fn receive(&self, input: SyncPut) -> Result<Stored>;
     async fn changes(&self, input: SyncChanges) -> Result<SyncChangesOutput>;
+    async fn poke(&self, input: SyncPoke) -> Result<Done>;
     async fn authorize(&self, pc: &PcId, key: &str) -> bool;
     async fn call(&self, pc: &PcId, request: &str, body: Value) -> Result<Value>;
     async fn pull(&self, pc: &PcId, hashes: Vec<Hash>) -> Result<()>;

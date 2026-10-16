@@ -45,6 +45,7 @@ impl Inner {
             Ok(peer) => peer,
             Err(err) => return tracing::warn!(%err, pc = %peer.pc, "peer book not saved"),
         };
+        self.pokes.saw(&peer.pc, &theirs.projects);
         for project in theirs.projects.iter().cloned() {
             let id = project.id.clone();
             if let Err(err) = self.follow(&peer, project, keep, space).await {

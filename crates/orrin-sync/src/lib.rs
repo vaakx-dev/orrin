@@ -7,6 +7,7 @@ mod follow;
 mod objects;
 mod offer;
 mod pairing;
+mod poke;
 mod presence;
 mod rounds;
 mod secret;

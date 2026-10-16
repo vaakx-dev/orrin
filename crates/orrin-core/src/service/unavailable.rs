@@ -117,6 +117,7 @@ impl Peers for Unavailable {
     async fn objects(&self, _: SyncGet) -> Result<Objects> { self.err() }
     async fn receive(&self, _: SyncPut) -> Result<Stored> { self.err() }
     async fn changes(&self, _: SyncChanges) -> Result<SyncChangesOutput> { self.err() }
+    async fn poke(&self, _: SyncPoke) -> Result<Done> { self.err() }
     async fn authorize(&self, _: &PcId, _: &str) -> bool { false }
     async fn call(&self, _: &PcId, _: &str, _: Value) -> Result<Value> { self.err() }
     async fn pull(&self, _: &PcId, _: Vec<Hash>) -> Result<()> { self.err() }

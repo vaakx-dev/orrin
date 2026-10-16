@@ -89,6 +89,14 @@ pub struct SyncChangesOutput {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct SyncPoke {
+    pub pc: PcId,
+    pub project: ProjectId,
+    pub main: SnapshotId,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SyncLand {
     pub project: ProjectId,
     pub parent: SnapshotId,

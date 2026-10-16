@@ -38,7 +38,7 @@ impl Node {
             me: setup.me.clone(),
             events: setup.events.clone(),
             store: Arc::new(MemoryStore::default()),
-            projects: Arc::new(MemoryProjects::default()),
+            projects: Arc::new(MemoryProjects::new(setup.events.clone())),
             views: missing.clone(),
             landing: missing.clone(),
             mergers: Vec::new(),
@@ -70,6 +70,7 @@ async fn dispatch(hub: &Hub, name: &str, body: Value) -> Result<Value> {
         "sync.get" => out(peers.objects(input(body)?).await),
         "sync.put" => out(peers.receive(input(body)?).await),
         "sync.changes" => out(peers.changes(input(body)?).await),
+        "sync.poke" => out(peers.poke(input(body)?).await),
         _ => Err(Error::not_found(name.to_string())),
     }
 }

@@ -73,6 +73,7 @@ requests! {
     SyncGet => "sync.get": Objects,
     SyncPut => "sync.put": Stored,
     SyncChanges => "sync.changes": SyncChangesOutput,
+    SyncPoke => "sync.poke": Done,
     SyncLand => "sync.land": LandOutput,
     SyncJob => "sync.job": Job,
     SyncFacts => "sync.facts": FactsOutput,

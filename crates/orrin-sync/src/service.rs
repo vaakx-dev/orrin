@@ -3,8 +3,8 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use orrin_core::api::{
-    Hashes, Objects, PcsList, PcsListOutput, PcsPair, PcsPairOutput, PcsRedeem, PcsSettings, Stored, SyncAnnounce,
-    SyncChanges, SyncChangesOutput, SyncGet, SyncMissing, SyncPair, SyncPairOutput, SyncPut,
+    Done, Hashes, Objects, PcsList, PcsListOutput, PcsPair, PcsPairOutput, PcsRedeem, PcsSettings, Stored,
+    SyncAnnounce, SyncChanges, SyncChangesOutput, SyncGet, SyncMissing, SyncPair, SyncPairOutput, SyncPoke, SyncPut,
 };
 use orrin_core::model::{Pc, PcSettings};
 use orrin_core::service::{Hub, Peers, Service, Setup};
@@ -13,6 +13,7 @@ use serde_json::Value;
 
 use crate::book::Book;
 use crate::pairing::Pending;
+use crate::poke::{self, Pokes};
 use crate::rounds;
 
 pub struct PeerService(Arc<Inner>);
@@ -26,6 +27,7 @@ pub(crate) struct Inner {
     pub book: Mutex<Book>,
     pub pending: Mutex<Vec<Pending>>,
     pub following: tokio::sync::Mutex<()>,
+    pub pokes: Pokes,
     pub http: reqwest::Client,
 }
 
@@ -46,6 +48,7 @@ impl PeerService {
             book: Mutex::new(Book::load(&setup.home)?),
             pending: Mutex::new(Vec::new()),
             following: tokio::sync::Mutex::new(()),
+            pokes: Pokes::default(),
             http,
         })))
     }
@@ -54,6 +57,7 @@ impl PeerService {
 impl Service for PeerService {
     fn start(&self) -> Result<()> {
         rounds::spawn(self.0.clone());
+        poke::spawn(self.0.clone());
         Ok(())
     }
 }
@@ -98,6 +102,11 @@ impl Peers for PeerService {
 
     async fn changes(&self, input: SyncChanges) -> Result<SyncChangesOutput> {
         self.0.changes(input).await
+    }
+
+    async fn poke(&self, input: SyncPoke) -> Result<Done> {
+        self.0.peer(&input.pc)?;
+        Ok(poke::poked(&self.0, input))
     }
 
     async fn authorize(&self, pc: &PcId, key: &str) -> bool {

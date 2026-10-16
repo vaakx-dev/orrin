@@ -24,6 +24,7 @@ impl Inner {
 
     pub async fn announce(&self, input: SyncAnnounce) -> Result<SyncAnnounce> {
         self.saw(&input.pc, |peer| learn(peer, &input))?;
+        self.pokes.saw(&input.pc, &input.projects);
         Ok(self.my_announce().await)
     }
 }

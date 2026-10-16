@@ -68,9 +68,11 @@ impl Engine {
     }
 
     pub async fn touched(&self, project: &ProjectId, view: Option<&ViewId>, paths: &[String]) -> Result<Clock> {
+        let before = self.index(project).read().clock;
         let index = self.sync_main(project).await?;
         let clock = match view {
             Some(view) => self.touch_view(project, &index, view, paths).await?,
+            None if index.read().clock != before => return Ok(index.read().clock),
             None => {
                 let clock = self.tick()?;
                 index.write().clock = clock;

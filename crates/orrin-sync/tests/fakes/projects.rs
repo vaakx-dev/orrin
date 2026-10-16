@@ -1,15 +1,21 @@
 use std::sync::Mutex;
 
 use async_trait::async_trait;
-use orrin_core::api::{Log, LogOutput, ProjectOpened, ProjectsCreate, ProjectsListOutput, ProjectsSettings};
+use orrin_core::api::{Event, Log, LogOutput, ProjectOpened, ProjectsCreate, ProjectsListOutput, ProjectsSettings};
 use orrin_core::model::{Change, Project, ProjectSettings};
 use orrin_core::service::{Projects, Service};
-use orrin_core::{ChangeId, Error, ProjectId, Result};
+use orrin_core::{ChangeId, Error, Events, ProjectId, Result};
 
-#[derive(Default)]
 pub struct MemoryProjects {
+    events: Events,
     projects: Mutex<Vec<Project>>,
     changes: Mutex<Vec<Change>>,
+}
+
+impl MemoryProjects {
+    pub fn new(events: Events) -> Self {
+        Self { events, projects: Mutex::default(), changes: Mutex::default() }
+    }
 }
 
 impl Service for MemoryProjects {}
@@ -45,8 +51,14 @@ impl Projects for MemoryProjects {
         Ok(())
     }
 
-    async fn swap_main(&self, _: Change) -> Result<Project> {
-        Err(Error::unavailable("fake"))
+    async fn swap_main(&self, change: Change) -> Result<Project> {
+        let mut project = self.get(&change.project).await?;
+        project.main = change.snapshot.clone();
+        self.save(project.clone()).await?;
+        self.changes.lock().unwrap().push(change.clone());
+        let main = project.main.clone();
+        self.events.emit(Event::MainMoved { project: project.id.clone(), main, change: change.id });
+        Ok(project)
     }
 
     async fn append(&self, changes: Vec<Change>) -> Result<()> {
