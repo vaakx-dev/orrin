@@ -51,6 +51,26 @@ async fn import_respects_ignores() {
 }
 
 #[tokio::test]
+async fn import_brings_back_included_paths() {
+    let rig = Rig::new(1 << 20);
+    let files = [
+        (".gitignore", "extern/\n*.obj\n"),
+        ("extern/lib/src/a.cpp", "a\n"),
+        ("extern/lib/src/a.obj", "x"),
+        ("extern/lib/bin/a.lib", "x"),
+        ("extern/other/b.cpp", "b\n"),
+        ("orrin.toml", "include = [\"extern/lib/**\"]\nignore = [\"extern/lib/bin/\", \"*.obj\"]\n"),
+    ];
+    let opened = import(&rig, &files).await;
+    let main = rig.hub.store.snapshot(&opened.project.main).unwrap();
+    let paths: Vec<&str> = main.entries.iter().map(|e| e.path.as_str()).collect();
+    assert_eq!(paths, [".gitignore", "extern/lib/src/a.cpp", "orrin.toml"]);
+    let user = opened.view.unwrap();
+    let changes = rig.views.changes(Changes { project: opened.project.id, view: user.id }).await.unwrap();
+    assert!(changes.files.is_empty());
+}
+
+#[tokio::test]
 async fn worker_edits_show_in_changes_and_diff() {
     let rig = Rig::new(1 << 20);
     let opened = import(&rig, &[("a.txt", "hello\n"), ("sub/b.txt", "b\n")]).await;
