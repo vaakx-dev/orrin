@@ -1,4 +1,5 @@
 mod analyse;
+mod documents;
 mod engine;
 mod outline;
 mod query;

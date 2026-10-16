@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 pub use kind::Kind;
 
+use crate::documents::{self, Block};
 use crate::{outline, symbols};
 
 pub const MAX_INDEXED: u64 = 16 * 1024 * 1024;
@@ -15,6 +16,7 @@ pub struct Record {
     #[serde(skip)]
     pub trigrams: Vec<u32>,
     pub text: bool,
+    pub document: bool,
     pub symbols: Vec<Sym>,
     pub outline: Vec<OutlineItem>,
 }
@@ -28,7 +30,23 @@ pub struct Sym {
     pub depth: u32,
 }
 
-pub fn analyse(kind: Kind, bytes: &[u8]) -> Record {
+#[derive(Default)]
+pub struct Analysis {
+    pub record: Record,
+    pub blocks: Option<Vec<Block>>,
+}
+
+pub fn analyse(kind: Kind, bytes: &[u8]) -> Analysis {
+    if let Kind::Document(format) = kind {
+        let doc = documents::extract(format, bytes);
+        let record = Record {
+            trigrams: trigrams::of_content(documents::plain(&doc.blocks).as_bytes()),
+            document: true,
+            outline: doc.outline,
+            ..Record::default()
+        };
+        return Analysis { record, blocks: Some(doc.blocks) };
+    }
     let text = is_text(bytes);
     let mut record = Record { text, ..Record::default() };
     if text {
@@ -42,12 +60,9 @@ pub fn analyse(kind: Kind, bytes: &[u8]) -> Record {
         }
         Kind::Markdown if text => record.outline = outline::markdown(&source()),
         Kind::Scene if text => record.outline = outline::godot(&source()),
-        Kind::Docx => record.outline = outline::docx(bytes),
-        Kind::Pptx => record.outline = outline::pptx(bytes),
-        Kind::Xlsx => record.outline = outline::xlsx(bytes),
         _ => {}
     }
-    record
+    Analysis { record, blocks: None }
 }
 
 fn is_text(bytes: &[u8]) -> bool {

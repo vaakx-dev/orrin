@@ -1,6 +1,6 @@
 mod fakes;
 
-use orrin_core::api::{Find, Outline, Search, Where};
+use orrin_core::api::{Find, Outline, Read, Search, Where};
 use orrin_core::{ProjectId, ViewId};
 
 const MAIN_RS: &str = "struct Player;\n\nfn main() {\n    let speed = 3;\n}\n";
@@ -77,4 +77,45 @@ async fn indexes_main_and_overlays_views() {
     assert!(boss.clock > clock);
     assert!(index.find(find("guide", None)).await.unwrap().files.is_empty());
     assert!(dir.path().join("index/index.db").exists());
+}
+
+fn docx(paragraphs: &[(&str, &str)]) -> Vec<u8> {
+    use std::io::Write;
+    let body: String = paragraphs
+        .iter()
+        .map(|(style, text)| {
+            format!(r#"<w:p><w:pPr><w:pStyle w:val="{style}"/></w:pPr><w:r><w:t>{text}</w:t></w:r></w:p>"#)
+        })
+        .collect();
+    let mut writer = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    writer.start_file("word/document.xml", zip::write::SimpleFileOptions::default()).unwrap();
+    write!(writer, "<w:document><w:body>{body}</w:body></w:document>").unwrap();
+    writer.finish().unwrap().into_inner()
+}
+
+#[tokio::test]
+async fn searches_and_reads_document_text() {
+    let dir = tempfile::tempdir().unwrap();
+    let plan = docx(&[("Heading1", "Budget"), ("Normal", "Travel costs rise"), ("Heading1", "Hiring")]);
+    let world = fakes::world(dir.path(), &[("docs/plan.docx", plan)]);
+    let index = orrin_index::open(&world.setup).unwrap();
+    world.wire(index.clone());
+
+    let hits = index.search(search("travel COSTS", false, None)).await.unwrap().hits;
+    assert_eq!((hits[0].path.as_str(), hits[0].anchor.as_deref()), ("docs/plan.docx", Some("p2")));
+
+    let found = index.find(find("hiring", None)).await.unwrap().files;
+    assert_eq!((found[0].heading.as_deref(), found[0].anchor.as_deref()), (Some("Hiring"), Some("p3")));
+
+    let read = Read {
+        project: ProjectId::from("p_test"),
+        view: None,
+        path: "docs/plan.docx".into(),
+        offset: None,
+        limit: None,
+        encoding: None,
+        anchor: Some("p1".into()),
+    };
+    let out = index.read_anchor(read).await.unwrap();
+    assert_eq!(out.content.as_deref(), Some("[p1] Budget\n[p2] Travel costs rise"));
 }

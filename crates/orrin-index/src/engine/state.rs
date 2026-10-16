@@ -27,13 +27,14 @@ pub struct Overlay {
 pub struct Visible {
     pub path: String,
     pub hash: Hash,
+    pub size: u64,
     pub record: Arc<Record>,
     pub edited: bool,
 }
 
 impl Visible {
     fn new(path: &str, file: &FileRef, edited: bool) -> Self {
-        Self { path: path.to_string(), hash: file.hash.clone(), record: file.record.clone(), edited }
+        Self { path: path.to_string(), hash: file.hash.clone(), size: file.size, record: file.record.clone(), edited }
     }
 }
 

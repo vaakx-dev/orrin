@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use orrin_core::api::{Event, Find, FindOutput, Outline, OutlineOutput, Search, SearchOutput, Where, WhereOutput};
+use orrin_core::api::{
+    Event, Find, FindOutput, Outline, OutlineOutput, Read, ReadOutput, Search, SearchOutput, Where, WhereOutput,
+};
 use orrin_core::service::{Index, Service, Setup};
 use orrin_core::{Clock, Events, ProjectId, Result, ViewId};
 use tokio::sync::broadcast::error::RecvError;
@@ -75,5 +77,9 @@ impl Index for IndexService {
 
     async fn clock(&self, project: &ProjectId, view: Option<&ViewId>) -> Clock {
         self.engine.clock(project, view).await
+    }
+
+    async fn read_anchor(&self, input: Read) -> Result<ReadOutput> {
+        query::read_anchor(&self.engine, input).await
     }
 }

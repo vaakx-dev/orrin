@@ -14,7 +14,21 @@ pub async fn find(engine: &Engine, input: Find) -> Result<FindOutput> {
     let mut hits: Vec<(i64, FileHit)> = Vec::new();
     state.each(input.view.as_ref(), |path, file| {
         if let Some(score) = matcher.score(path) {
-            hits.push((score, FileHit { path: path.to_string(), size: file.size }));
+            hits.push((score, FileHit { path: path.to_string(), size: file.size, heading: None, anchor: None }));
+        }
+        if !file.record.document {
+            return;
+        }
+        for item in &file.record.outline {
+            if let Some(score) = matcher.heading(&item.name) {
+                let hit = FileHit {
+                    path: path.to_string(),
+                    size: file.size,
+                    heading: Some(item.name.clone()),
+                    anchor: item.anchor.clone(),
+                };
+                hits.push((score, hit));
+            }
         }
     });
     hits.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.path.cmp(&b.1.path)));
@@ -53,6 +67,17 @@ impl Matcher {
                 tokens.iter().map(|t| fuzzy(t, &lower)).sum()
             }
         }
+    }
+
+    fn heading(&self, name: &str) -> Option<i64> {
+        let Matcher::Fuzzy(tokens) = self else { return None };
+        let lower: Vec<char> = name.to_lowercase().chars().collect();
+        let found = |t: &Vec<char>| lower.windows(t.len()).any(|w| w == t.as_slice());
+        if !tokens.iter().all(found) {
+            return None;
+        }
+        let score: i64 = tokens.iter().filter_map(|t| subsequence(t, &lower)).sum();
+        Some(score + 50 - lower.len() as i64 / 4)
     }
 }
 

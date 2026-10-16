@@ -2,6 +2,7 @@ mod find;
 mod locate;
 mod paths;
 mod plan;
+mod read;
 mod search;
 
 use orrin_core::api::{Outline, OutlineOutput};
@@ -11,6 +12,7 @@ use orrin_core::{Error, Result};
 pub use find::find;
 pub use locate::locate;
 pub use plan::Plan;
+pub use read::read_anchor;
 pub use search::search;
 
 use crate::engine::Engine;

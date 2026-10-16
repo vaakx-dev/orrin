@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 
-use crate::api::{Find, FindOutput, Outline, OutlineOutput, Search, SearchOutput, Where, WhereOutput};
+use crate::api::{Find, FindOutput, Outline, OutlineOutput, Read, ReadOutput, Search, SearchOutput, Where, WhereOutput};
 use crate::clock::Clock;
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::id::{ProjectId, ViewId};
 use crate::service::Service;
 
@@ -14,4 +14,7 @@ pub trait Index: Service {
     async fn locate(&self, input: Where) -> Result<WhereOutput>;
     async fn touched(&self, project: &ProjectId, view: Option<&ViewId>, paths: &[String]) -> Result<Clock>;
     async fn clock(&self, project: &ProjectId, view: Option<&ViewId>) -> Clock;
+    async fn read_anchor(&self, _input: Read) -> Result<ReadOutput> {
+        Err(Error::unavailable("document text is unavailable"))
+    }
 }

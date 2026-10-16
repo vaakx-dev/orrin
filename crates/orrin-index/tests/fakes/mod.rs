@@ -57,13 +57,13 @@ impl Store for MemStore {
 }
 
 impl MemStore {
-    pub fn snapshot_of(&self, files: &[(&str, &str)]) -> SnapshotId {
+    pub fn snapshot_of(&self, files: &[(&str, impl AsRef<[u8]>)]) -> SnapshotId {
         let entries = files
             .iter()
             .map(|(path, body)| Entry {
                 path: path.to_string(),
-                hash: self.put(body.as_bytes()).unwrap(),
-                size: body.len() as u64,
+                hash: self.put(body.as_ref()).unwrap(),
+                size: body.as_ref().len() as u64,
                 mode: Mode::File,
             })
             .collect();
@@ -256,7 +256,7 @@ pub struct World {
     pub views: Arc<FolderViews>,
 }
 
-pub fn world(home: &Path, files: &[(&str, &str)]) -> World {
+pub fn world(home: &Path, files: &[(&str, impl AsRef<[u8]>)]) -> World {
     let home = orrin_core::Home::at(home).unwrap();
     let hub = Hub::new();
     let setup = Setup {

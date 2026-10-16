@@ -6,8 +6,15 @@ use orrin_core::{Clock, Error, Hash, Result};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::analyse::{Kind, Record, trigrams};
+use crate::documents::Block;
 
-const VERSION: u32 = 1;
+const VERSION: u32 = 2;
+
+pub struct Row {
+    pub key: String,
+    pub record: Record,
+    pub blocks: Option<Vec<Block>>,
+}
 
 pub struct Records {
     db: Mutex<Connection>,
@@ -25,6 +32,7 @@ impl Records {
             "PRAGMA journal_mode = WAL;
              PRAGMA synchronous = NORMAL;
              CREATE TABLE IF NOT EXISTS records (key TEXT PRIMARY KEY, meta BLOB NOT NULL, trigrams BLOB NOT NULL);
+             CREATE TABLE IF NOT EXISTS texts (key TEXT PRIMARY KEY, blocks BLOB NOT NULL);
              CREATE TABLE IF NOT EXISTS meta (name TEXT PRIMARY KEY, value INTEGER NOT NULL);",
         )
         .map_err(sql)?;
@@ -47,20 +55,47 @@ impl Records {
         Some(self.remember(key, record))
     }
 
-    pub fn put_all(&self, fresh: Vec<(String, Record)>) -> Result<Vec<Arc<Record>>> {
+    pub fn put_all(&self, fresh: Vec<Row>) -> Result<Vec<Arc<Record>>> {
         let mut db = self.db();
         let tx = db.transaction().map_err(sql)?;
-        for (key, record) in &fresh {
-            let meta = serde_json::to_vec(record)?;
+        for row in &fresh {
+            let meta = serde_json::to_vec(&row.record)?;
             tx.execute(
                 "INSERT OR REPLACE INTO records (key, meta, trigrams) VALUES (?1, ?2, ?3)",
-                params![key, meta, trigrams::encode(&record.trigrams)],
+                params![row.key, meta, trigrams::encode(&row.record.trigrams)],
             )
             .map_err(sql)?;
+            if let Some(blocks) = &row.blocks {
+                tx.execute(
+                    "INSERT OR REPLACE INTO texts (key, blocks) VALUES (?1, ?2)",
+                    params![row.key, serde_json::to_vec(blocks)?],
+                )
+                .map_err(sql)?;
+            }
         }
         tx.commit().map_err(sql)?;
         drop(db);
-        Ok(fresh.into_iter().map(|(key, record)| self.remember(&key, record)).collect())
+        Ok(fresh.into_iter().map(|row| self.remember(&row.key, row.record)).collect())
+    }
+
+    pub fn blocks(&self, key: &str) -> Option<Vec<Block>> {
+        let row: Option<Vec<u8>> = self
+            .db()
+            .query_row("SELECT blocks FROM texts WHERE key = ?1", [key], |r| r.get(0))
+            .optional()
+            .ok()
+            .flatten();
+        serde_json::from_slice(&row?).ok()
+    }
+
+    pub fn put_blocks(&self, key: &str, blocks: &[Block]) -> Result<()> {
+        self.db()
+            .execute(
+                "INSERT OR REPLACE INTO texts (key, blocks) VALUES (?1, ?2)",
+                params![key, serde_json::to_vec(blocks)?],
+            )
+            .map_err(sql)?;
+        Ok(())
     }
 
     pub fn clock(&self) -> Clock {

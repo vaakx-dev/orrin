@@ -1,4 +1,5 @@
 mod content;
+mod document;
 mod layer;
 mod main;
 mod overlay;
@@ -57,6 +58,10 @@ impl Engine {
 
     pub fn hub(&self) -> &Hub {
         &self.hub
+    }
+
+    pub fn records(&self) -> Arc<Records> {
+        self.records.clone()
     }
 
     pub async fn open(&self, project: &ProjectId, view: Option<&ViewId>) -> Result<Arc<ProjectIndex>> {

@@ -41,7 +41,13 @@ pub fn extract(lang: Lang, source: &str) -> Vec<Sym> {
 pub fn outline(symbols: &[Sym]) -> Vec<OutlineItem> {
     symbols
         .iter()
-        .map(|s| OutlineItem { kind: s.kind.clone(), name: s.name.clone(), depth: s.depth, line: Some(s.line) })
+        .map(|s| OutlineItem {
+            kind: s.kind.clone(),
+            name: s.name.clone(),
+            depth: s.depth,
+            line: Some(s.line),
+            anchor: None,
+        })
         .collect()
 }
 

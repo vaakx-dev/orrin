@@ -87,8 +87,15 @@ async fn worker_edits_show_in_changes_and_diff() {
     let patch = rig.views.diff(diff).await.unwrap().files[0].patch.clone().unwrap();
     assert!(patch.contains("-hello") && patch.contains("+bye"));
 
-    let read =
-        |view| Read { project: project.clone(), view, path: "a.txt".into(), offset: None, limit: None, encoding: None };
+    let read = |view| Read {
+        project: project.clone(),
+        view,
+        path: "a.txt".into(),
+        offset: None,
+        limit: None,
+        encoding: None,
+        anchor: None,
+    };
     assert_eq!(rig.views.read(read(Some(view.id.clone()))).await.unwrap().content.unwrap(), "bye\n");
     assert_eq!(rig.views.read(read(None)).await.unwrap().content.unwrap(), "hello\n");
 }

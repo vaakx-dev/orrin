@@ -8,8 +8,8 @@ use orrin_core::service::Store;
 use orrin_core::{Error, ErrorCode, Hash, ProjectId, Result, ViewId};
 
 use super::Engine;
-use crate::analyse::{Kind, MAX_INDEXED, Record, analyse};
-use crate::records::key;
+use crate::analyse::{Analysis, Kind, MAX_INDEXED, Record, analyse};
+use crate::records::{Row, key};
 use orrin_core::par::par_map;
 
 pub struct Item {
@@ -69,6 +69,7 @@ impl Engine {
             offset: None,
             limit: None,
             encoding: Some(Encoding::Base64),
+            anchor: None,
         };
         match self.hub.views.read(read).await {
             Ok(out) => Ok(Some(ViewFile { bytes: decode(&out), hash: out.hash, size: out.size })),
@@ -84,14 +85,14 @@ impl Engine {
             let analysed = par_map(&misses, |(item, _)| analyse_item(&*store, item));
             let mut fresh = Vec::new();
             let mut unread = Vec::new();
-            for ((mut item, key), record) in misses.into_iter().zip(analysed) {
+            for ((mut item, key), analysis) in misses.into_iter().zip(analysed) {
                 item.bytes = None;
-                match record {
-                    Some(record) => fresh.push((item, (key, record))),
+                match analysis {
+                    Some(Analysis { record, blocks }) => fresh.push((item, Row { key, record, blocks })),
                     None => unread.push((item, Arc::new(Record::default()))),
                 }
             }
-            let (items, rows): (Vec<Item>, Vec<(String, Record)>) = fresh.into_iter().unzip();
+            let (items, rows): (Vec<Item>, Vec<Row>) = fresh.into_iter().unzip();
             let stored = records.put_all(rows)?;
             Ok(items.into_iter().zip(stored).chain(unread).collect())
         })
@@ -115,9 +116,9 @@ fn wanted(item: &Item) -> bool {
     Kind::of(&item.path) != Kind::Skip && item.size <= MAX_INDEXED
 }
 
-fn analyse_item(store: &dyn Store, item: &Item) -> Option<Record> {
+fn analyse_item(store: &dyn Store, item: &Item) -> Option<Analysis> {
     if !wanted(item) {
-        return Some(Record::default());
+        return Some(Analysis::default());
     }
     let kind = Kind::of(&item.path);
     match &item.bytes {

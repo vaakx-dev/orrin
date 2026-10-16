@@ -9,6 +9,9 @@ use crate::inner::Inner;
 
 impl Inner {
     pub async fn read(&self, input: Read) -> Result<ReadOutput> {
+        if input.anchor.is_some() {
+            return self.hub.index.read_anchor(input).await;
+        }
         let path = clean_path(&input.path)?;
         let (bytes, clock) = match &input.view {
             Some(id) => {

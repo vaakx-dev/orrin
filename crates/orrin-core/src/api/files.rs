@@ -17,6 +17,8 @@ pub struct Read {
     pub limit: Option<u32>,
     #[serde(default)]
     pub encoding: Option<Encoding>,
+    #[serde(default)]
+    pub anchor: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
