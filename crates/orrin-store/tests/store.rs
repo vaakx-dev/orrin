@@ -51,8 +51,28 @@ fn small_files_round_trip_and_dedupe() {
     assert_eq!(store.get(&other).unwrap_err().code, orrin_core::ErrorCode::NotFound);
 }
 
+fn bytes_under(dir: &Path) -> u64 {
+    walkdir(dir).iter().map(|path| std::fs::metadata(path).unwrap().len()).sum()
+}
+
+fn walkdir(dir: &Path) -> Vec<std::path::PathBuf> {
+    let mut found = Vec::new();
+    for entry in std::fs::read_dir(dir).unwrap().flatten() {
+        if entry.file_type().unwrap().is_dir() {
+            found.extend(walkdir(&entry.path()));
+        } else {
+            found.push(entry.path());
+        }
+    }
+    found
+}
+
+fn writable(path: &Path) -> bool {
+    std::fs::OpenOptions::new().write(true).open(path).is_ok()
+}
+
 #[test]
-fn big_files_are_chunked_and_materialised() {
+fn big_files_are_stored_once_and_chunked_for_sync() {
     let dir = tempfile::tempdir().unwrap();
     let store = store(dir.path());
     let bytes = noise("big", 3 * 1024 * 1024);
@@ -62,8 +82,11 @@ fn big_files_are_chunked_and_materialised() {
     assert_eq!(hash, Hash::of(&bytes));
     assert_eq!(store.get(&hash).unwrap(), bytes);
     assert_eq!(store.size(&hash).unwrap(), bytes.len() as u64);
+    assert!(bytes_under(&dir.path().join("store/objects")) < 200_000);
+    assert_eq!(bytes_under(&dir.path().join("store/files")), bytes.len() as u64);
     let parts = store.parts(&hash).unwrap();
     assert!(parts.len() > 10);
+    assert_eq!(store.missing(&parts), Vec::<Hash>::new());
 
     let mut edited = bytes.clone();
     edited[1_500_000] ^= 1;
@@ -71,19 +94,41 @@ fn big_files_are_chunked_and_materialised() {
     let shared = store.parts(&changed).unwrap().iter().filter(|part| parts.contains(part)).count();
     assert!(shared + 2 >= parts.len());
 
-    for (name, how) in [("copy", Materialise::Copy), ("ro", Materialise::ReadonlyCopy), ("link", Materialise::Link)] {
-        let target = dir.path().join("out").join(name);
-        store.materialise(&hash, &target, how).unwrap();
-        store.materialise(&hash, &target, how).unwrap();
-        assert_eq!(std::fs::read(&target).unwrap(), bytes);
-        assert_eq!(std::fs::metadata(&target).unwrap().permissions().readonly(), how != Materialise::Copy);
+    let peer = DiskStore::open(dir.path().join("peer")).unwrap();
+    peer.put_raw(&hash, &store.raw(&hash).unwrap()).unwrap();
+    for part in &parts {
+        peer.put_raw(part, &store.raw(part).unwrap()).unwrap();
     }
-    let target = dir.path().join("out").join("link");
-    store.materialise(&changed, &target, Materialise::Copy).unwrap();
-    assert_eq!(std::fs::read(&target).unwrap(), edited);
-    store.materialise(&hash, &dir.path().join("again"), Materialise::Link).unwrap();
-    assert_eq!(std::fs::read(dir.path().join("again")).unwrap(), bytes);
-    assert!(std::fs::metadata(dir.path().join("again")).unwrap().permissions().readonly());
+    let slice = format!("orrin-object/v1\n{{\"kind\":\"slice\",\"file\":\"{hash}\",\"offset\":0,\"len\":1}}");
+    assert!(peer.put_raw(&Hash::of(b"x"), slice.as_bytes()).is_err());
+    peer.materialise(&hash, &dir.path().join("peer.bin"), Materialise::Link).unwrap();
+    assert_eq!(std::fs::read(dir.path().join("peer.bin")).unwrap(), bytes);
+    assert!(bytes_under(&dir.path().join("peer/objects")) < 200_000);
+    assert_eq!(peer.raw(&parts[3]).unwrap(), store.raw(&parts[3]).unwrap());
+}
+
+#[test]
+fn links_are_shared_until_replaced_and_never_written_through() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store(dir.path());
+    let small = store.put(b"small file\n").unwrap();
+    let big = store.put(&noise("big", 2 * 1024 * 1024)).unwrap();
+    for (name, hash) in [("small", &small), ("big", &big)] {
+        let target = dir.path().join("view").join(name);
+        store.materialise(hash, &target, Materialise::Link).unwrap();
+        store.materialise(hash, &target, Materialise::Link).unwrap();
+        assert_eq!(std::fs::read(&target).unwrap(), store.get(hash).unwrap());
+        assert!(!writable(&target));
+        std::fs::write(target.with_extension("new"), b"mine").unwrap();
+        std::fs::rename(target.with_extension("new"), &target).unwrap();
+        assert_eq!(std::fs::read(&target).unwrap(), b"mine");
+        assert!(store.get(hash).is_ok());
+    }
+    let copy = dir.path().join("view").join("copy");
+    store.materialise(&small, &copy, Materialise::Copy).unwrap();
+    assert!(writable(&copy));
+    store.materialise(&small, &copy, Materialise::ReadonlyCopy).unwrap();
+    assert!(std::fs::metadata(&copy).unwrap().permissions().readonly());
 }
 
 #[test]
@@ -117,9 +162,29 @@ fn gc_keeps_what_roots_reach() {
     store.materialise(&dropped, &dir.path().join("dropped"), Materialise::Link).unwrap();
 
     let report = store.gc(std::slice::from_ref(&snapshot)).unwrap();
-    assert_eq!(report.removed, 2);
+    assert_eq!(report.removed, 1);
     assert!(!store.has(&dropped));
     assert!(store.has(&snapshot));
     assert_eq!(store.get(&kept).unwrap().len(), 2 * 1024 * 1024);
     assert_eq!(std::fs::read(dir.path().join("dropped")).unwrap(), b"dropped");
+}
+
+#[test]
+fn gc_moves_shared_chunks_out_of_dropped_big_files() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store(dir.path());
+    let old = noise("v1", 3 * 1024 * 1024);
+    let mut new = old.clone();
+    new[100] ^= 1;
+    let old_hash = store.put(&old).unwrap();
+    let new_hash = store.put(&new).unwrap();
+    let snapshot = store.put_snapshot(&Snapshot::new(vec![entry("a.bin", &new_hash)])).unwrap();
+
+    store.gc(std::slice::from_ref(&snapshot)).unwrap();
+    assert!(!store.has(&old_hash));
+    assert_eq!(bytes_under(&dir.path().join("store/files")), new.len() as u64);
+    assert_eq!(store.get(&new_hash).unwrap(), new);
+    for part in store.parts(&new_hash).unwrap() {
+        assert_eq!(Hash::of(&store.raw(&part).unwrap()), part);
+    }
 }

@@ -101,8 +101,8 @@ async fn worker_edits_show_in_changes_and_diff() {
 }
 
 #[tokio::test]
-async fn big_files_are_read_only_links_until_written() {
-    let rig = Rig::new(8);
+async fn worker_files_are_shared_links_until_written() {
+    let rig = Rig::new(1 << 20);
     let opened = import(&rig, &[("big.txt", "0123456789abcdef\n")]).await;
     let project = opened.project.id.clone();
     let view = worker(&rig, &project).await;

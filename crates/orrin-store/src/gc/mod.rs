@@ -1,3 +1,5 @@
+mod rescue;
+
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -25,11 +27,14 @@ impl DiskStore {
         let files = self.listing(&self.files_dir())?;
         let mut start = roots.to_vec();
         start.extend(roots.iter().flat_map(|root| self.snapshot_entries(root)));
-        start.extend(objects.iter().filter(|stored| stored.recent).map(|stored| stored.hash.clone()));
+        start.extend(objects.iter().chain(&files).filter(|stored| stored.recent).map(|stored| stored.hash.clone()));
+        start.extend(self.reput_recently());
         let live = self.mark(start);
+        let dying: Vec<Hash> = files.iter().filter(|f| !live.contains(&f.hash)).map(|f| f.hash.clone()).collect();
+        self.rescue(&live, &files, &dying)?;
         let mut report = GcReport::default();
         for stored in objects.iter().chain(&files) {
-            if !stored.recent && !live.contains(&stored.hash) && fs::remove_file(&stored.path).is_ok() {
+            if !live.contains(&stored.hash) && fs::remove_file(&stored.path).is_ok() {
                 report.removed += 1;
                 report.freed += stored.len;
             }

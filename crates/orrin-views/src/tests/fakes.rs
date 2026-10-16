@@ -107,6 +107,7 @@ impl Store for FakeStore {
         hashes.iter().filter(|h| !self.has(h)).cloned().collect()
     }
     fn materialise(&self, hash: &Hash, path: &Path, how: Materialise) -> Result<()> {
+        std::fs::create_dir_all(path.parent().unwrap())?;
         if how != Materialise::Link {
             return Ok(std::fs::write(path, self.get(hash)?)?);
         }

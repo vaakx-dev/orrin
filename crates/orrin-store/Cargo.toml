@@ -10,9 +10,13 @@ orrin-core.workspace = true
 blake3.workspace = true
 fastcdc.workspace = true
 flate2 = "1.1"
+reflink-copy = "0.1.30"
 serde.workspace = true
 serde_json.workspace = true
 zip.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization"] }
 
 [dev-dependencies]
 tempfile.workspace = true

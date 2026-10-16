@@ -1,9 +1,11 @@
-mod chunks;
+mod big;
 mod disk;
 mod gc;
+mod link;
 mod materialise;
 mod object;
 mod read;
+mod seal;
 mod service;
 mod verified;
 mod write;

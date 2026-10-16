@@ -37,7 +37,7 @@ impl Slot {
             id: view.id.clone(),
             project: view.project.clone(),
             kind: view.kind,
-            root: view.path.clone(),
+            root: std::path::absolute(&view.path).unwrap_or_else(|_| view.path.clone()),
             rules: Mutex::new(Arc::new(Rules::load(&view.path, &[]))),
             record: tokio::sync::Mutex::new(record),
             stats: Mutex::new(stats),

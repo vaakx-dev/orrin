@@ -54,8 +54,8 @@ impl Stats {
         Ok(self.remember(rel, &meta, hash))
     }
 
-    pub fn unchanged(&self, rel: &str, meta: &Metadata) -> bool {
-        self.0.get(rel).is_some_and(|s| matches(s, meta))
+    pub fn known(&self, rel: &str, meta: &Metadata) -> Option<Hash> {
+        self.0.get(rel).filter(|s| matches(s, meta)).map(|s| s.state.hash.clone())
     }
 
     pub fn rename(&mut self, from: &str, to: &str) {

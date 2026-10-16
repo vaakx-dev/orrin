@@ -53,6 +53,10 @@ pub fn set_executable(_path: &Path) -> Result<()> {
     Ok(())
 }
 
+pub fn is_sealed(path: &Path) -> bool {
+    fs::OpenOptions::new().write(true).open(path).is_err_and(|err| err.kind() == std::io::ErrorKind::PermissionDenied)
+}
+
 #[cfg(windows)]
 pub fn is_locked(path: &Path) -> bool {
     use std::os::windows::fs::OpenOptionsExt;
