@@ -1,0 +1,30 @@
+[package]
+name = "orrin-server"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+orrin-core.workspace = true
+orrin-store.workspace = true
+orrin-projects.workspace = true
+orrin-views.workspace = true
+orrin-landing.workspace = true
+orrin-merge.workspace = true
+orrin-index.workspace = true
+orrin-facts.workspace = true
+orrin-builds.workspace = true
+orrin-sync.workspace = true
+orrin-git.workspace = true
+axum.workspace = true
+futures-util.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+reqwest.workspace = true
+tempfile.workspace = true
+tokio-tungstenite.workspace = true
