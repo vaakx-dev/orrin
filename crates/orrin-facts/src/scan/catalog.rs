@@ -15,6 +15,7 @@ const fn tool(name: &'static str, probe: Option<&'static [&'static str]>) -> Spe
 
 pub const SPECS: &[Spec] = &[
     Spec { installer: Some("git"), subdirs: &["cmd", "bin"], ..tool("git", VERSION) },
+    Spec { installer: Some("git"), subdirs: &["bin"], ..tool("bash", VERSION) },
     Spec { exes: &["python", "python3"], installer: Some("python 3"), ..tool("python", VERSION) },
     tool("py", VERSION),
     tool("pip", VERSION),
@@ -33,6 +34,9 @@ pub const SPECS: &[Spec] = &[
     Spec { installer: Some("cmake"), subdirs: &["bin"], ..tool("cmake", VERSION) },
     tool("ninja", VERSION),
     tool("make", VERSION),
+    tool("scons", VERSION),
+    tool("sccache", VERSION),
+    tool("ccache", VERSION),
     tool("gcc", VERSION),
     tool("clang", VERSION),
     tool("cl", None),

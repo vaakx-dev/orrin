@@ -61,7 +61,11 @@ fn scons(cache: &Path) -> Env {
 }
 
 fn launchers(tool: &Path) -> Env {
-    vec![var("CMAKE_C_COMPILER_LAUNCHER", tool), var("CMAKE_CXX_COMPILER_LAUNCHER", tool)]
+    vec![
+        var("ORRIN_COMPILER_LAUNCHER", tool),
+        var("CMAKE_C_COMPILER_LAUNCHER", tool),
+        var("CMAKE_CXX_COMPILER_LAUNCHER", tool),
+    ]
 }
 
 fn var(name: &str, value: impl AsRef<std::ffi::OsStr>) -> (String, OsString) {
@@ -86,6 +90,7 @@ mod tests {
         };
         let env = sccache(launch(false));
         assert_eq!(get(&env, "RUSTC_WRAPPER").unwrap(), "/bin/sccache");
+        assert_eq!(get(&env, "ORRIN_COMPILER_LAUNCHER").unwrap(), "/bin/sccache");
         assert_eq!(get(&env, "SCCACHE_DIR").unwrap(), "/home/caches/sccache");
         assert_eq!(get(&env, "SCCACHE_BASEDIRS").unwrap(), "/home/runs/job");
         assert_eq!(get(&env, "CARGO_INCREMENTAL").unwrap(), "0");

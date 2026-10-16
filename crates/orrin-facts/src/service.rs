@@ -86,7 +86,12 @@ impl Facts for FactsService {
         if input.refresh {
             self.inner.refresh().await?;
         }
-        let tools = self.inner.book().tools().into_iter().filter(keep).collect();
+        let mut tools: Vec<Tool> = self.inner.book().tools().into_iter().filter(keep).collect();
+        if tools.is_empty()
+            && let Some(name) = &input.name
+        {
+            tools.extend(self.tool(name).await?);
+        }
         Ok(FactsOutput { pc: self.inner.me.clone(), tools })
     }
 
