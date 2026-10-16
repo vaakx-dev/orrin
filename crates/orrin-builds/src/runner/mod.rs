@@ -1,26 +1,33 @@
+mod after;
+mod compiler;
 mod folder;
 mod outputs;
+mod placeholders;
+pub mod warm;
+mod workspace;
 
-use std::path::PathBuf;
+use std::collections::BTreeMap;
+use std::path::Path;
 use std::sync::Arc;
 
-use orrin_core::model::{Artifact, Job, JobResult, JobState, Stream};
+use orrin_core::model::{Artifact, Entry, Job, JobResult, JobState, Snapshot, Stream};
 use orrin_core::{Error, Hash, JobId, Result, now_ms};
 use tokio::sync::watch;
 
 use crate::context::Context;
-use crate::key;
-use crate::plan::{Plan, tool_names};
+use crate::plan::{Plan, Target};
 use crate::process::{self, Exit, Limits, Spec};
-use crate::queue::Need;
+use crate::queue::{Need, Slot};
 use crate::table::Claim;
 use crate::tools::{self, Tools};
+use placeholders::Values;
+use workspace::Workspace;
 
 const RESULT_LINES: usize = 2000;
 
 pub async fn submit(ctx: &Arc<Context>, plan: Plan) -> Result<Job> {
     let tools = tools::resolve(&ctx.hub, &plan.tools()).await;
-    let key = key::action(&plan.name, &plan.recipe, &plan.args, &plan.snapshot, &tools)?;
+    let key = after::key(ctx, &plan, &plan.name, &plan.args).await?;
     if plan.cacheable()
         && let Some((hash, result)) = ctx.cache.lookup(&*ctx.hub.store, &key)
     {
@@ -37,9 +44,27 @@ pub async fn submit(ctx: &Arc<Context>, plan: Plan) -> Result<Job> {
             Claim::Fresh(job, cancel) => (job, cancel),
         },
     };
+    ctx.table.journal().args(&job.id, &plan.args);
     let run = Run { ctx: ctx.clone(), plan: Arc::new(plan), tools, key, id: job.id.clone() };
     tokio::spawn(run.go(cancel));
     Ok(job)
+}
+
+pub async fn resume(ctx: &Arc<Context>, job: &Job, args: Vec<String>, cancel: watch::Receiver<bool>) -> Result<()> {
+    let store = &*ctx.hub.store;
+    let target = Target {
+        kind: job.kind,
+        project: job.project.clone(),
+        snapshot_id: job.snapshot.clone(),
+        snapshot: store.snapshot(&job.snapshot)?,
+        recipe: job.recipe.clone(),
+        args,
+    };
+    let plan = Plan::load(store, target)?;
+    let tools = tools::resolve(&ctx.hub, &plan.tools()).await;
+    let key = after::key(ctx, &plan, &plan.name, &plan.args).await?;
+    Run { ctx: ctx.clone(), plan: Arc::new(plan), tools, key, id: job.id.clone() }.go(cancel).await;
+    Ok(())
 }
 
 fn cached(ctx: &Context, plan: &Plan, hash: Hash, result: JobResult) -> Job {
@@ -67,24 +92,15 @@ struct Run {
 
 impl Run {
     async fn go(self, mut cancel: watch::Receiver<bool>) {
-        let recipe = &self.plan.recipe;
-        let need = Need {
-            cpu: recipe.cpu.unwrap_or(1),
-            ram_mb: recipe.ram_mb.unwrap_or(0),
-            gpu: self.plan.needs_gpu() as u32,
-        };
-        let slot = tokio::select! {
-            slot = self.ctx.queue.acquire(need) => Some(slot),
-            _ = cancel.wait_for(|c| *c) => None,
-        };
-        match slot {
+        match self.ready(&mut cancel).await {
             None => self.cancelled(),
-            Some(slot) => {
+            Some(Err(err)) => self.finish(Err(err)).await,
+            Some(Ok((extras, slot))) => {
                 self.ctx.table.update(&self.id, |job| {
                     job.state = JobState::Running;
                     job.started_at = Some(now_ms());
                 });
-                let outcome = self.execute(cancel).await;
+                let outcome = self.execute(extras, cancel).await;
                 drop(slot);
                 self.finish(outcome).await;
             }
@@ -92,63 +108,83 @@ impl Run {
         self.ctx.table.release(&self.key, &self.id);
     }
 
-    async fn execute(&self, cancel: watch::Receiver<bool>) -> Result<(Exit, Vec<Artifact>)> {
-        let dir = folder::fresh(&self.ctx.home.runs(), &self.id)?;
-        let outcome = self.execute_in(&dir, cancel).await;
-        let cleanup = dir.clone();
-        let _ = tokio::task::spawn_blocking(move || folder::remove(&cleanup)).await;
+    async fn ready(&self, cancel: &mut watch::Receiver<bool>) -> Option<Result<(Vec<Artifact>, Slot)>> {
+        let recipe = &self.plan.recipe;
+        let need = Need {
+            cpu: recipe.cpu.unwrap_or(1),
+            ram_mb: recipe.ram_mb.unwrap_or(0),
+            gpu: self.plan.needs_gpu() as u32,
+        };
+        let work = async {
+            let extras = after::outputs(&self.ctx, &self.plan, &self.id).await?;
+            Ok((extras, self.ctx.queue.acquire(need).await))
+        };
+        tokio::select! {
+            ready = work => Some(ready),
+            _ = cancel.wait_for(|c| *c) => None,
+        }
+    }
+
+    async fn execute(&self, extras: Vec<Artifact>, cancel: watch::Receiver<bool>) -> Result<(Exit, Vec<Artifact>)> {
+        let files = inputs(&self.plan.snapshot, extras);
+        let workspace = Workspace::prepare(&self.ctx, &self.plan, &self.id, files.entries.clone()).await?;
+        let outcome = self.execute_in(workspace.dir(), files, cancel).await;
+        workspace.close().await;
         outcome
     }
 
-    async fn execute_in(&self, dir: &std::path::Path, cancel: watch::Receiver<bool>) -> Result<(Exit, Vec<Artifact>)> {
-        let extras = self.cached_outputs().await;
-        let (store, plan, target) = (self.ctx.hub.store.clone(), self.plan.clone(), dir.to_path_buf());
-        let big = self.ctx.config.views.big_file;
-        blocking(move || folder::fill(&*store, &target, &plan.snapshot, big, &extras)).await?;
-        self.ctx.table.log(&self.id, Stream::System, format!("$ {}", self.plan.recipe.command));
-        let exit =
-            process::run(self.spec(dir), cancel, |stream, text| self.ctx.table.log(&self.id, stream, text)).await?;
+    async fn execute_in(
+        &self,
+        dir: &Path,
+        files: Snapshot,
+        cancel: watch::Receiver<bool>,
+    ) -> Result<(Exit, Vec<Artifact>)> {
+        let spec = self.spec(dir).await?;
+        self.ctx.table.log(&self.id, Stream::System, format!("$ {}", spec.command));
+        let exit = process::run(spec, cancel, |stream, text| self.ctx.table.log(&self.id, stream, text)).await?;
         if exit != Exit::Code(Some(0)) {
             return Ok((exit, Vec::new()));
         }
-        let (store, plan, target) = (self.ctx.hub.store.clone(), self.plan.clone(), dir.to_path_buf());
-        let artifacts =
-            blocking(move || outputs::collect(&*store, &target, &plan.recipe.outputs, &plan.snapshot)).await?;
+        let (store, patterns, target) =
+            (self.ctx.hub.store.clone(), self.plan.recipe.outputs.clone(), dir.to_path_buf());
+        let artifacts = blocking(move || outputs::collect(&*store, &target, &patterns, &files)).await?;
         Ok((exit, artifacts))
     }
 
-    fn spec(&self, dir: &std::path::Path) -> Spec {
+    async fn spec(&self, dir: &Path) -> Result<Spec> {
         let recipe = &self.plan.recipe;
+        let screenshots = dir.join(folder::SCREENSHOTS);
         let mut env = vec![
             ("ORRIN_JOB".to_string(), self.id.as_str().into()),
             ("ORRIN_RECIPE".to_string(), self.plan.name.clone().into()),
-            ("ORRIN_SCREENSHOTS".to_string(), dir.join(folder::SCREENSHOTS).into_os_string()),
+            ("ORRIN_SCREENSHOTS".to_string(), screenshots.clone().into_os_string()),
         ];
         if let Some(path) = tools::search_path(&self.tools) {
             env.push(("PATH".to_string(), path));
         }
+        let wiring = compiler::wire(&self.ctx, recipe, dir).await?;
+        if let Some(note) = wiring.note {
+            self.ctx.table.log(&self.id, Stream::System, note);
+        }
+        env.extend(wiring.env);
+        let values = Values {
+            dir,
+            screenshots: &screenshots,
+            job: self.id.as_str(),
+            recipe: &self.plan.name,
+            args: &self.plan.args,
+        };
+        let expanded = placeholders::expand(&tools::command_line(&recipe.command, &self.tools), &values);
         let cores = self.ctx.queue.cores();
         let limits =
             Limits { cpu_percent: recipe.cpu.map(|c| c.saturating_mul(100) / cores), memory_mb: recipe.ram_mb };
-        Spec {
-            command: tools::command_line(&recipe.command, &self.tools),
-            args: self.plan.args.clone(),
-            dir: PathBuf::from(dir),
+        Ok(Spec {
+            command: expanded.command,
+            args: if expanded.took_args { Vec::new() } else { self.plan.args.clone() },
+            dir: dir.to_path_buf(),
             env,
             limits,
-        }
-    }
-
-    async fn cached_outputs(&self) -> Vec<Artifact> {
-        let mut artifacts = Vec::new();
-        for (name, recipe) in self.plan.recipes.iter().filter(|(name, _)| **name != self.plan.name) {
-            let tools = tools::resolve(&self.ctx.hub, &tool_names(recipe)).await;
-            let Ok(key) = key::action(name, recipe, &[], &self.plan.snapshot, &tools) else { continue };
-            if let Some((_, result)) = self.ctx.cache.lookup(&*self.ctx.hub.store, &key) {
-                artifacts.extend(result.artifacts);
-            }
-        }
-        artifacts
+        })
     }
 
     async fn finish(&self, outcome: Result<(Exit, Vec<Artifact>)>) {
@@ -204,6 +240,16 @@ impl Run {
             job.finished_at = Some(now_ms());
         });
     }
+}
+
+fn inputs(snapshot: &Snapshot, extras: Vec<Artifact>) -> Snapshot {
+    let mut files: BTreeMap<String, Entry> = snapshot.entries.iter().map(|e| (e.path.clone(), e.clone())).collect();
+    for artifact in extras {
+        let entry =
+            Entry { path: artifact.path.clone(), hash: artifact.hash, size: artifact.size, mode: Default::default() };
+        files.insert(artifact.path, entry);
+    }
+    Snapshot::new(files.into_values().collect())
 }
 
 async fn blocking<T: Send + 'static>(work: impl FnOnce() -> Result<T> + Send + 'static) -> Result<T> {

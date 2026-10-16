@@ -11,7 +11,7 @@ use crate::context::Context;
 use crate::plan::{Plan, Target};
 use crate::remote::{self, Place};
 use crate::roots;
-use crate::{runner, source};
+use crate::{recover, runner, source};
 
 const CANCEL_WAIT: Duration = Duration::from_secs(5);
 const LOG_LIMIT: u32 = 1000;
@@ -33,7 +33,7 @@ impl Service for BuildService {
             std::fs::remove_dir_all(&runs)?;
         }
         std::fs::create_dir_all(runs)?;
-        Ok(())
+        recover::restore(&self.ctx)
     }
 }
 
@@ -101,7 +101,8 @@ impl Builds for BuildService {
     }
 
     async fn list(&self, input: JobList) -> Result<JobListOutput> {
-        let jobs = self.ctx.table.jobs().into_iter().filter(|job| input.project.as_ref().is_none_or(|p| *p == job.project));
+        let jobs =
+            self.ctx.table.jobs().into_iter().filter(|job| input.project.as_ref().is_none_or(|p| *p == job.project));
         Ok(JobListOutput { jobs: jobs.collect() })
     }
 

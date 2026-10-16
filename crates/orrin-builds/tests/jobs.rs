@@ -6,7 +6,7 @@ use orrin_core::api::{JobLogs, JobRef};
 use orrin_core::model::{JobKind, JobState};
 use orrin_core::service::Store;
 
-use fakes::world;
+use fakes::{World, world};
 
 #[cfg(windows)]
 mod cmd {
@@ -14,6 +14,10 @@ mod cmd {
     pub const WHERE: &str = "cd > where.txt & type a.txt > b.txt";
     pub const SLEEP: &str = "ping -n 30 127.0.0.1 > nul";
     pub const NAP: &str = "ping -n 3 127.0.0.1 > nul & echo done> out.txt";
+    pub const LIB: &str = "echo built> lib.txt";
+    pub const OTHER: &str = "echo other> other.txt";
+    pub const APP: &str = "type lib.txt > app.out & if exist other.txt echo leaked> leak.out";
+    pub const WARM: &str = "echo {recipe}>> stamp.out";
 }
 
 #[cfg(not(windows))]
@@ -22,6 +26,10 @@ mod cmd {
     pub const WHERE: &str = "pwd > where.txt; cat a.txt > b.txt";
     pub const SLEEP: &str = "sleep 30";
     pub const NAP: &str = "sleep 2; echo done > out.txt";
+    pub const LIB: &str = "echo built > lib.txt";
+    pub const OTHER: &str = "echo other > other.txt";
+    pub const APP: &str = "cat lib.txt > app.out; if [ -f other.txt ]; then echo leaked > leak.out; fi";
+    pub const WARM: &str = "echo {recipe} >> stamp.out";
 }
 
 fn manifest(name: &str, command: &str) -> String {
@@ -91,4 +99,55 @@ async fn cancel_kills_the_job() {
     let cancelled = w.builds.cancel(JobRef { job: job.id }).await.unwrap();
     assert_eq!(cancelled.state, JobState::Cancelled);
     assert!(started.elapsed() < Duration::from_secs(5));
+}
+
+async fn outputs(w: &World, kind: JobKind, recipe: &str) -> Vec<(String, String)> {
+    let job = w.builds.submit(kind, w.input(recipe)).await.unwrap();
+    let job = w.finished(&job.id).await;
+    assert_eq!(job.state, JobState::Succeeded, "{job:?}");
+    let artifacts = w.builds.artifacts(JobRef { job: job.id }).await.unwrap().artifacts;
+    artifacts.into_iter().map(|a| (a.path, String::from_utf8(w.store.get(&a.hash).unwrap()).unwrap())).collect()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn after_brings_only_its_outputs() {
+    let manifest = format!(
+        "[recipes.lib]\ncommand = '{}'\noutputs = [\"*.txt\"]\n\
+         [recipes.other]\ncommand = '{}'\noutputs = [\"*.txt\"]\n\
+         [recipes.app]\ncommand = '{}'\noutputs = [\"*.out\"]\nafter = [\"lib\"]\n",
+        cmd::LIB,
+        cmd::OTHER,
+        cmd::APP
+    );
+    let w = world(&[("orrin.toml", &manifest)]);
+    outputs(&w, JobKind::Build, "other").await;
+    let built = outputs(&w, JobKind::Build, "app").await;
+    assert_eq!(built.len(), 1, "{built:?}");
+    assert_eq!(built[0].0, "app.out");
+    assert_eq!(built[0].1.trim(), "built");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn warm_folders_keep_build_state_between_runs() {
+    let manifest = format!("[recipes.warm]\ncommand = '{}'\noutputs = [\"*.out\"]\nwarm = true\n", cmd::WARM);
+    let w = world(&[("orrin.toml", &manifest)]);
+    outputs(&w, JobKind::Run, "warm").await;
+    let second = outputs(&w, JobKind::Run, "warm").await;
+    let lines: Vec<&str> = second[0].1.lines().map(str::trim).collect();
+    assert_eq!(lines, ["warm", "warm"]);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn finished_jobs_survive_a_restart() {
+    let manifest = format!("[recipes.lib]\ncommand = '{}'\noutputs = [\"*.txt\"]\n", cmd::LIB);
+    let w = world(&[("orrin.toml", &manifest)]);
+    let job = w.builds.submit(JobKind::Build, w.input("lib")).await.unwrap();
+    let job = w.finished(&job.id).await;
+    let before = w.builds.artifacts(JobRef { job: job.id.clone() }).await.unwrap().artifacts;
+
+    let builds = w.restart();
+    assert_eq!(builds.status(JobRef { job: job.id.clone() }).await.unwrap(), job);
+    let logs = builds.logs(JobLogs { job: job.id.clone(), after: None, limit: None }).await.unwrap();
+    assert!(logs.done && logs.lines[0].text.starts_with("$ "));
+    assert_eq!(builds.artifacts(JobRef { job: job.id }).await.unwrap().artifacts, before);
 }

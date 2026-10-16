@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::api::JobLogs;
 use crate::id::{ChangeId, Hash, JobId, PcId, ProjectId, SnapshotId};
 use crate::model::{Change, FileState, JobKind, PcSettings, Project};
 
@@ -121,6 +122,10 @@ pub struct SyncJob {
     #[serde(default)]
     pub cancel: bool,
 }
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct SyncLogs(pub JobLogs);
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

@@ -7,6 +7,8 @@ use orrin_core::model::{Artifact, Job, LogLine, Stream};
 use orrin_core::{Error, Events, Hash, JobId, Result, now_ms};
 use tokio::sync::{Notify, watch};
 
+use crate::journal::{Journal, Saved};
+
 const KEEP_LINES: usize = 20_000;
 
 struct Entry {
@@ -32,11 +34,16 @@ pub struct Table {
     inner: Mutex<Inner>,
     changed: Notify,
     events: Events,
+    journal: Journal,
 }
 
 impl Table {
-    pub fn new(events: Events) -> Self {
-        Self { inner: Mutex::default(), changed: Notify::new(), events }
+    pub fn new(events: Events, journal: Journal) -> Self {
+        Self { inner: Mutex::default(), changed: Notify::new(), events, journal }
+    }
+
+    pub fn journal(&self) -> &Journal {
+        &self.journal
     }
 
     pub fn claim(&self, job: Job, key: &Hash) -> Claim {
@@ -45,22 +52,33 @@ impl Table {
             return Claim::Shared(existing.job.clone());
         }
         inner.running.insert(key.clone(), job.id.clone());
-        let cancelled = Self::add(&mut inner, job.clone());
+        let cancelled = Self::add(&mut inner, job.clone(), Vec::new(), Vec::new());
         drop(inner);
-        self.events.emit(Event::Job { job: job.clone() });
+        self.added(&job);
         Claim::Fresh(job, cancelled)
     }
 
     pub fn insert(&self, job: Job) -> watch::Receiver<bool> {
-        let cancelled = Self::add(&mut self.inner.lock().unwrap(), job.clone());
-        self.events.emit(Event::Job { job });
+        let cancelled = Self::add(&mut self.inner.lock().unwrap(), job.clone(), Vec::new(), Vec::new());
+        self.added(&job);
         cancelled
     }
 
-    fn add(inner: &mut Inner, job: Job) -> watch::Receiver<bool> {
+    pub fn restore(&self, saved: Saved) -> watch::Receiver<bool> {
+        Self::add(&mut self.inner.lock().unwrap(), saved.job, saved.logs, saved.artifacts)
+    }
+
+    fn added(&self, job: &Job) {
+        self.journal.job(job);
+        self.events.emit(Event::Job { job: job.clone() });
+    }
+
+    fn add(inner: &mut Inner, job: Job, logs: Vec<LogLine>, artifacts: Vec<Artifact>) -> watch::Receiver<bool> {
         let (cancel, cancelled) = watch::channel(false);
         let id = job.id.clone();
-        inner.entries.insert(id, Entry { job, logs: VecDeque::new(), next_line: 0, artifacts: Vec::new(), cancel });
+        let next_line = logs.last().map_or(0, |line| line.n);
+        let logs = logs.into_iter().rev().take(KEEP_LINES).rev().collect();
+        inner.entries.insert(id, Entry { job, logs, next_line, artifacts, cancel });
         cancelled
     }
 
@@ -80,6 +98,7 @@ impl Table {
             (entry.job.clone(), entry.job != before)
         };
         if changed {
+            self.journal.job(&job);
             self.events.emit(Event::Job { job: job.clone() });
             self.changed.notify_waiters();
         }
@@ -98,6 +117,7 @@ impl Table {
             }
             line
         };
+        self.journal.log(id, &line);
         self.events.emit(Event::JobLog { job: id.clone(), line });
     }
 
@@ -108,6 +128,7 @@ impl Table {
     }
 
     pub fn set_artifacts(&self, id: &JobId, artifacts: Vec<Artifact>) {
+        self.journal.artifacts(id, &artifacts);
         if let Some(entry) = self.inner.lock().unwrap().entries.get_mut(id) {
             entry.artifacts = artifacts;
         }
@@ -144,20 +165,21 @@ impl Table {
         })
     }
 
-    pub async fn wait_done(&self, id: &JobId, limit: Duration) -> Result<Job> {
-        let wait = async {
-            loop {
-                let changed = self.changed.notified();
-                tokio::pin!(changed);
-                changed.as_mut().enable();
-                let job = self.job(id)?;
-                if job.state.is_done() {
-                    return Ok(job);
-                }
-                changed.await;
+    pub async fn done(&self, id: &JobId) -> Result<Job> {
+        loop {
+            let changed = self.changed.notified();
+            tokio::pin!(changed);
+            changed.as_mut().enable();
+            let job = self.job(id)?;
+            if job.state.is_done() {
+                return Ok(job);
             }
-        };
-        match tokio::time::timeout(limit, wait).await {
+            changed.await;
+        }
+    }
+
+    pub async fn wait_done(&self, id: &JobId, limit: Duration) -> Result<Job> {
+        match tokio::time::timeout(limit, self.done(id)).await {
             Ok(done) => done,
             Err(_) => self.job(id),
         }

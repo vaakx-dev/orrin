@@ -3,7 +3,9 @@ use orrin_core::service::{Hub, Setup};
 use orrin_core::{Config, Home, Identity, Result};
 
 use crate::cache::Cache;
+use crate::journal::Journal;
 use crate::queue::Queue;
+use crate::runner::warm::Pool;
 use crate::table::Table;
 
 pub struct Context {
@@ -14,6 +16,7 @@ pub struct Context {
     pub table: Table,
     pub queue: Queue,
     pub cache: Cache,
+    pub warm: Pool,
 }
 
 impl Context {
@@ -23,9 +26,10 @@ impl Context {
             home: setup.home.clone(),
             config: setup.config.clone(),
             me: setup.me.clone(),
-            table: Table::new(setup.events.clone()),
+            table: Table::new(setup.events.clone(), Journal::open(&setup.home.db())?),
             queue: Queue::new(&setup.config.builds),
             cache: Cache::new(setup.home.dir("builds/cache")?),
+            warm: Pool::default(),
         })
     }
 

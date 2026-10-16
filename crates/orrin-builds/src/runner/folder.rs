@@ -1,9 +1,9 @@
 use std::path::{Path, PathBuf};
 
-use orrin_core::model::{Artifact, Mode, Snapshot, clean_path};
+use orrin_core::model::{Entry, Mode, clean_path};
 use orrin_core::par::par_map;
 use orrin_core::service::{Materialise, Store};
-use orrin_core::{Hash, JobId, Result};
+use orrin_core::{JobId, Result};
 
 pub const SCREENSHOTS: &str = ".orrin/screenshots";
 
@@ -16,38 +16,33 @@ pub fn fresh(runs: &Path, id: &JobId) -> Result<PathBuf> {
     Ok(dir)
 }
 
-pub fn fill(store: &dyn Store, dir: &Path, snapshot: &Snapshot, big: u64, extras: &[Artifact]) -> Result<()> {
-    let placed = par_map(&snapshot.entries, |entry| {
+pub fn fill(store: &dyn Store, dir: &Path, files: &[Entry], big: u64) -> Result<()> {
+    let placed = par_map(files, |entry| {
         let how = if entry.size > big { Materialise::Link } else { Materialise::Copy };
-        let target = place(store, dir, &entry.path, &entry.hash, how)?;
-        match entry.mode {
-            Mode::Executable => executable(&target),
-            _ => Ok(()),
-        }
+        write(store, dir, entry, how).map(drop)
     });
-    placed.into_iter().collect::<Result<()>>()?;
-    for artifact in extras {
-        place(store, dir, &artifact.path, &artifact.hash, Materialise::Copy)?;
-    }
-    Ok(())
+    placed.into_iter().collect()
 }
 
-pub fn remove(dir: &Path) {
-    if let Err(err) = std::fs::remove_dir_all(dir) {
-        tracing::warn!("could not remove run folder {}: {err}", dir.display());
-    }
-}
-
-fn place(store: &dyn Store, dir: &Path, path: &str, hash: &Hash, how: Materialise) -> Result<PathBuf> {
-    let target = dir.join(clean_path(path)?);
+pub fn write(store: &dyn Store, dir: &Path, entry: &Entry, how: Materialise) -> Result<PathBuf> {
+    let target = dir.join(clean_path(&entry.path)?);
     if let Some(parent) = target.parent() {
         std::fs::create_dir_all(parent)?;
     }
     if target.exists() {
         std::fs::remove_file(&target)?;
     }
-    store.materialise(hash, &target, how)?;
+    store.materialise(&entry.hash, &target, how)?;
+    if matches!(entry.mode, Mode::Executable) {
+        executable(&target)?;
+    }
     Ok(target)
+}
+
+pub fn remove(dir: &Path) {
+    if let Err(err) = std::fs::remove_dir_all(dir) {
+        tracing::warn!("could not remove run folder {}: {err}", dir.display());
+    }
 }
 
 #[cfg(unix)]

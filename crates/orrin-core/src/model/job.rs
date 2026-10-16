@@ -101,6 +101,19 @@ pub struct Recipe {
     pub cpu: Option<u32>,
     pub ram_mb: Option<u64>,
     pub gpu: bool,
+    pub after: Vec<String>,
+    pub cache: CompilerCache,
+    pub warm: bool,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CompilerCache {
+    #[default]
+    None,
+    Sccache,
+    Ccache,
+    Scons,
 }
 
 pub const MANIFEST_PATH: &str = "orrin.toml";

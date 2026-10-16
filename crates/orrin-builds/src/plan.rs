@@ -29,6 +29,11 @@ pub struct Target {
 impl Plan {
     pub fn load(store: &dyn Store, target: Target) -> Result<Self> {
         let recipes = recipe::load_all(store, &target.snapshot)?;
+        Self::with(recipes, target)
+    }
+
+    fn with(recipes: BTreeMap<String, Recipe>, target: Target) -> Result<Self> {
+        recipe::check_after(&recipes, &target.recipe)?;
         let recipe = recipes
             .get(&target.recipe)
             .cloned()
@@ -43,6 +48,18 @@ impl Plan {
             recipe,
             args: target.args,
         })
+    }
+
+    pub fn sibling(&self, name: &str) -> Result<Self> {
+        let target = Target {
+            kind: JobKind::Build,
+            project: self.project.clone(),
+            snapshot_id: self.snapshot_id.clone(),
+            snapshot: self.snapshot.clone(),
+            recipe: name.to_string(),
+            args: Vec::new(),
+        };
+        Self::with(self.recipes.clone(), target)
     }
 
     pub fn cacheable(&self) -> bool {

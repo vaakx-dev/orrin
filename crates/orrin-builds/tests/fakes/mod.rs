@@ -98,6 +98,7 @@ pub struct World {
     pub builds: Arc<dyn Builds>,
     pub store: Arc<FakeStore>,
     pub project: ProjectId,
+    pub setup: Setup,
 }
 
 pub fn world(files: &[(&str, &str)]) -> World {
@@ -143,10 +144,16 @@ pub fn world(files: &[(&str, &str)]) -> World {
         git: Arc::new(Unavailable("git")),
     });
     builds.start().unwrap();
-    World { _dir: dir, home, builds, store, project: project.id }
+    World { _dir: dir, home, builds, store, project: project.id, setup }
 }
 
 impl World {
+    pub fn restart(&self) -> Arc<dyn Builds> {
+        let builds = orrin_builds::open(&self.setup).unwrap();
+        builds.start().unwrap();
+        builds
+    }
+
     pub fn input(&self, recipe: &str) -> JobInput {
         JobInput { project: self.project.clone(), view: None, recipe: recipe.into(), args: Vec::new(), pc: None }
     }

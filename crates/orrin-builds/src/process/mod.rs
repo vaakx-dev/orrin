@@ -101,12 +101,16 @@ async fn read_lines(source: impl AsyncRead + Unpin, stream: Stream, tx: mpsc::Un
     }
 }
 
+pub fn join_args(args: &[String]) -> String {
+    args.iter().map(|arg| quote(arg)).collect::<Vec<_>>().join(" ")
+}
+
 #[cfg(windows)]
 fn shell(spec: &Spec) -> Command {
     let mut line = spec.command.clone();
-    for arg in &spec.args {
+    if !spec.args.is_empty() {
         line.push(' ');
-        line.push_str(&quote(arg));
+        line.push_str(&join_args(&spec.args));
     }
     let mut command = Command::new("cmd");
     command.args(["/D", "/S", "/C"]).raw_arg(format!("\"{line}\""));
@@ -118,6 +122,15 @@ fn quote(arg: &str) -> String {
     match arg.is_empty() || arg.contains([' ', '\t', '"', '&', '|', '<', '>', '^']) {
         true => format!("\"{}\"", arg.replace('"', "\"\"")),
         false => arg.to_string(),
+    }
+}
+
+#[cfg(not(windows))]
+fn quote(arg: &str) -> String {
+    let plain = !arg.is_empty() && arg.chars().all(|c| c.is_ascii_alphanumeric() || "-_./=:,+@%".contains(c));
+    match plain {
+        true => arg.to_string(),
+        false => format!("'{}'", arg.replace('\'', "'\\''")),
     }
 }
 

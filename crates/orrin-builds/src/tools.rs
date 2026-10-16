@@ -15,6 +15,13 @@ pub async fn resolve(hub: &Services, names: &[String]) -> Tools {
     tools
 }
 
+pub async fn find(hub: &Services, name: &str) -> Option<PathBuf> {
+    match hub.facts.tool(name).await {
+        Ok(Some(tool)) => Some(PathBuf::from(tool.path)),
+        _ => which(name),
+    }
+}
+
 pub fn all_known(tools: &Tools) -> bool {
     tools.iter().all(|(_, tool)| tool.is_some())
 }

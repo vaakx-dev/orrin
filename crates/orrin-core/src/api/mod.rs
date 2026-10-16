@@ -77,6 +77,7 @@ requests! {
     SyncPoke => "sync.poke": Done,
     SyncLand => "sync.land": LandOutput,
     SyncJob => "sync.job": Job,
+    SyncLogs => "sync.logs": JobLogsOutput,
     SyncFacts => "sync.facts": FactsOutput,
 }
 

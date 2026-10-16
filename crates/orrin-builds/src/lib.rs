@@ -1,10 +1,12 @@
 mod cache;
 mod context;
+mod journal;
 mod key;
 mod plan;
 mod process;
 mod queue;
 mod recipe;
+mod recover;
 mod remote;
 mod roots;
 mod runner;
