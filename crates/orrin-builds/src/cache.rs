@@ -20,6 +20,12 @@ impl Cache {
         result.artifacts.iter().all(|a| store.has(&a.hash)).then_some((hash, result))
     }
 
+    pub fn results(&self) -> Vec<Hash> {
+        let entries = std::fs::read_dir(&self.dir).into_iter().flatten().flatten();
+        let texts = entries.filter_map(|entry| std::fs::read_to_string(entry.path()).ok());
+        texts.filter_map(|text| Hash::parse(text.trim()).ok()).collect()
+    }
+
     pub fn put(&self, key: &Hash, result: &Hash) -> Result<()> {
         let path = self.dir.join(key.as_str());
         let temp = path.with_extension("tmp");

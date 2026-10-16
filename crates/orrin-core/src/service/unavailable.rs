@@ -104,6 +104,7 @@ impl Builds for Unavailable {
     async fn artifacts(&self, _: JobRef) -> Result<JobArtifactsOutput> { self.err() }
     async fn cancel(&self, _: JobRef) -> Result<Job> { self.err() }
     async fn list(&self, _: JobList) -> Result<JobListOutput> { self.err() }
+    async fn roots(&self) -> Result<Vec<Hash>> { Ok(Vec::new()) }
 }
 
 #[async_trait]

@@ -2,6 +2,7 @@ use async_trait::async_trait;
 
 use crate::api::{JobArtifactsOutput, JobInput, JobList, JobListOutput, JobLogs, JobLogsOutput, JobRef, SyncJob};
 use crate::error::Result;
+use crate::id::Hash;
 use crate::model::{Job, JobKind};
 use crate::service::Service;
 
@@ -14,4 +15,5 @@ pub trait Builds: Service {
     async fn artifacts(&self, input: JobRef) -> Result<JobArtifactsOutput>;
     async fn cancel(&self, input: JobRef) -> Result<Job>;
     async fn list(&self, input: JobList) -> Result<JobListOutput>;
+    async fn roots(&self) -> Result<Vec<Hash>>;
 }

@@ -1,4 +1,5 @@
 mod http;
+mod maintenance;
 mod registry;
 mod routes;
 mod wiring;

@@ -15,6 +15,19 @@ pub struct Config {
     pub history: HistoryConfig,
     pub views: ViewsConfig,
     pub builds: BuildsConfig,
+    pub maintenance: MaintenanceConfig,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct MaintenanceConfig {
+    pub every_hours: u32,
+}
+
+impl Default for MaintenanceConfig {
+    fn default() -> Self {
+        Self { every_hours: 6 }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

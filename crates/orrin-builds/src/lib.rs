@@ -6,6 +6,7 @@ mod process;
 mod queue;
 mod recipe;
 mod remote;
+mod roots;
 mod runner;
 mod service;
 mod source;

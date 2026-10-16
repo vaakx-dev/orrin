@@ -5,11 +5,12 @@ use async_trait::async_trait;
 use orrin_core::api::{JobArtifactsOutput, JobInput, JobList, JobListOutput, JobLogs, JobLogsOutput, JobRef, SyncJob};
 use orrin_core::model::{Job, JobKind};
 use orrin_core::service::{Builds, Service, Setup};
-use orrin_core::{Error, Result};
+use orrin_core::{Error, Hash, Result};
 
 use crate::context::Context;
 use crate::plan::{Plan, Target};
 use crate::remote::{self, Place};
+use crate::roots;
 use crate::{runner, source};
 
 const CANCEL_WAIT: Duration = Duration::from_secs(5);
@@ -102,5 +103,9 @@ impl Builds for BuildService {
     async fn list(&self, input: JobList) -> Result<JobListOutput> {
         let jobs = self.ctx.table.jobs().into_iter().filter(|job| input.project.as_ref().is_none_or(|p| *p == job.project));
         Ok(JobListOutput { jobs: jobs.collect() })
+    }
+
+    async fn roots(&self) -> Result<Vec<Hash>> {
+        Ok(roots::collect(&self.ctx))
     }
 }

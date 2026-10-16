@@ -22,6 +22,7 @@ pub fn wire(home: Home, config: Config) -> Result<Hub> {
     };
     setup.hub.set(services);
     start(&setup.hub)?;
+    crate::maintenance::start(&setup.hub);
     Ok(setup.hub)
 }
 
