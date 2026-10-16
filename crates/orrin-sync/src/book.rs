@@ -13,6 +13,7 @@ pub struct Peer {
     pub pc: PcId,
     pub name: String,
     pub address: String,
+    pub fingerprint: String,
     pub send_key: String,
     pub accept_key: String,
     #[serde(default)]

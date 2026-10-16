@@ -14,6 +14,7 @@ pub struct SyncPair {
     pub name: String,
     pub address: String,
     pub key: String,
+    pub fingerprint: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -22,6 +23,7 @@ pub struct SyncPairOutput {
     pub pc: PcId,
     pub name: String,
     pub key: String,
+    pub fingerprint: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

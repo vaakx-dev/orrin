@@ -1,4 +1,5 @@
 pub mod api;
+pub mod cert;
 pub mod clock;
 pub mod config;
 pub mod daemon;
@@ -9,6 +10,7 @@ pub mod id;
 pub mod identity;
 pub mod model;
 pub mod par;
+pub mod secret;
 pub mod service;
 
 pub use clock::{Clock, Millis, now_ms};

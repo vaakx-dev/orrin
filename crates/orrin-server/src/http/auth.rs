@@ -1,9 +1,11 @@
-use std::net::SocketAddr;
-
 use axum::http::HeaderMap;
 use orrin_core::api::is_peer_request;
-use orrin_core::service::Hub;
+use orrin_core::daemon::LOCAL_KEY_HEADER;
+use orrin_core::secret::same;
 use orrin_core::{Error, PcId, Result};
+
+use crate::http::AppState;
+use crate::transport::Remote;
 
 pub const PC_HEADER: &str = "x-orrin-pc";
 pub const KEY_HEADER: &str = "x-orrin-key";
@@ -16,13 +18,14 @@ pub enum Caller {
     Stranger,
 }
 
-pub async fn identify(hub: &Hub, addr: SocketAddr, headers: &HeaderMap) -> Caller {
-    if addr.ip().is_loopback() {
+pub async fn identify(state: &AppState, remote: Remote, headers: &HeaderMap, local_key: Option<&str>) -> Caller {
+    let header = |name| headers.get(name).and_then(|v| v.to_str().ok());
+    let local_key = local_key.or(header(LOCAL_KEY_HEADER));
+    if remote.is_loopback() && local_key.is_some_and(|key| same(key, &state.local_key)) {
         return Caller::Local;
     }
-    let header = |name| headers.get(name).and_then(|v| v.to_str().ok());
     match (header(PC_HEADER), header(KEY_HEADER)) {
-        (Some(pc), Some(key)) if hub.peers.authorize(&PcId::from(pc), key).await => Caller::Peer(PcId::from(pc)),
+        (Some(pc), Some(key)) if state.hub.peers.authorize(&PcId::from(pc), key).await => Caller::Peer(PcId::from(pc)),
         _ => Caller::Stranger,
     }
 }
@@ -34,6 +37,13 @@ pub fn allow(caller: &Caller, request: &str) -> Result<()> {
         Caller::Stranger => OPEN_TO_STRANGERS.contains(&request),
     };
     if allowed { Ok(()) } else { Err(Error::unauthorized(format!("not allowed to call {request}"))) }
+}
+
+pub fn allow_local(caller: &Caller) -> Result<()> {
+    match caller {
+        Caller::Local => Ok(()),
+        _ => Err(Error::unauthorized(format!("send the local key in {LOCAL_KEY_HEADER}"))),
+    }
 }
 
 #[cfg(test)]

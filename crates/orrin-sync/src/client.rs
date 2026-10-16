@@ -11,7 +11,7 @@ const KEY_HEADER: &str = "x-orrin-key";
 impl Inner {
     pub async fn call(&self, pc: &PcId, request: &str, body: Value) -> Result<Value> {
         let peer = self.peer(pc)?;
-        self.post(&peer.address, request, &body, Some(&peer.send_key)).await
+        self.post(&peer.address, &peer.fingerprint, request, &body, Some(&peer.send_key)).await
     }
 
     pub async fn ask<R: Request>(&self, pc: &PcId, input: R) -> Result<R::Output> {
@@ -19,8 +19,15 @@ impl Inner {
         Ok(serde_json::from_value(value)?)
     }
 
-    pub async fn post(&self, address: &str, request: &str, body: &Value, key: Option<&str>) -> Result<Value> {
-        let mut builder = self.http.post(url(address, request)).json(body);
+    pub async fn post(
+        &self,
+        address: &str,
+        fingerprint: &str,
+        request: &str,
+        body: &Value,
+        key: Option<&str>,
+    ) -> Result<Value> {
+        let mut builder = self.transport.client(fingerprint)?.post(url(address, request)).json(body);
         if let Some(key) = key {
             builder = builder.header(PC_HEADER, self.me.pc.as_str()).header(KEY_HEADER, key);
         }

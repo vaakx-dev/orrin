@@ -14,6 +14,7 @@ use crate::registry::Registry;
 pub struct AppState {
     pub hub: Hub,
     pub registry: Arc<Registry>,
+    pub local_key: Arc<str>,
 }
 
 pub fn router(state: AppState) -> Router {

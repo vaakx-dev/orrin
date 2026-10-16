@@ -1,22 +1,28 @@
-use std::net::SocketAddr;
-
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::extract::{ConnectInfo, State};
+use axum::extract::{ConnectInfo, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use orrin_core::Events;
+use serde::Deserialize;
 use tokio::sync::broadcast::error::RecvError;
 
 use crate::http::AppState;
-use crate::http::auth::{Caller, identify};
+use crate::http::auth::{allow_local, identify};
+use crate::transport::Remote;
+
+#[derive(Deserialize)]
+pub struct KeyQuery {
+    key: Option<String>,
+}
 
 pub async fn subscribe(
     State(state): State<AppState>,
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    ConnectInfo(remote): ConnectInfo<Remote>,
+    Query(query): Query<KeyQuery>,
     headers: HeaderMap,
     upgrade: WebSocketUpgrade,
 ) -> Response {
-    if identify(&state.hub, addr, &headers).await == Caller::Stranger {
+    if allow_local(&identify(&state, remote, &headers, query.key.as_deref()).await).is_err() {
         return StatusCode::UNAUTHORIZED.into_response();
     }
     let events = state.hub.events.clone();

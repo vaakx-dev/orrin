@@ -11,6 +11,7 @@ pub struct PairCode {
     pub pc: PcId,
     pub name: String,
     pub addresses: Vec<String>,
+    pub fingerprint: String,
     pub secret: String,
 }
 
@@ -38,6 +39,7 @@ mod tests {
             pc: PcId::from("pc_a"),
             name: "desk".into(),
             addresses: vec!["10.0.0.2:4520".into()],
+            fingerprint: "f".into(),
             secret: "s".into(),
         };
         assert_eq!(PairCode::decode(&code.encode()).unwrap(), code);

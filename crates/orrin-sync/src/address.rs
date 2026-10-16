@@ -34,11 +34,8 @@ fn lan_ip() -> Option<IpAddr> {
 
 pub fn url(address: &str, request: &str) -> String {
     let base = address.trim().trim_end_matches('/');
-    if base.starts_with("http://") || base.starts_with("https://") {
-        format!("{base}/api/{request}")
-    } else {
-        format!("http://{base}/api/{request}")
-    }
+    let host = base.strip_prefix("https://").or_else(|| base.strip_prefix("http://")).unwrap_or(base);
+    format!("https://{host}/api/{request}")
 }
 
 #[cfg(test)]
@@ -47,7 +44,7 @@ mod tests {
 
     #[test]
     fn builds_urls() {
-        assert_eq!(url("10.0.0.2:4520", "sync.get"), "http://10.0.0.2:4520/api/sync.get");
-        assert_eq!(url("http://box:1/", "ping"), "http://box:1/api/ping");
+        assert_eq!(url("10.0.0.2:4520", "sync.get"), "https://10.0.0.2:4520/api/sync.get");
+        assert_eq!(url("http://box:1/", "ping"), "https://box:1/api/ping");
     }
 }

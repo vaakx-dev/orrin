@@ -13,6 +13,7 @@ use serde_json::{Value, json};
 
 use super::projects::MemoryProjects;
 use super::store::MemoryStore;
+use super::tls::TlsListener;
 
 pub struct Node {
     pub hub: Hub,
@@ -49,6 +50,7 @@ impl Node {
             git: missing,
         });
         let router = Router::new().route("/api/{name}", post(handle)).with_state(setup.hub.clone());
+        let listener = TlsListener::new(listener, &home);
         tokio::spawn(async move { axum::serve(listener, router).await });
         Self { hub: setup.hub, home, _dir: dir }
     }

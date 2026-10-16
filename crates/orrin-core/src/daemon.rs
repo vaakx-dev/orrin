@@ -5,6 +5,8 @@ use crate::error::{Error, Result};
 use crate::home::Home;
 use crate::id::PcId;
 
+pub const LOCAL_KEY_HEADER: &str = "x-orrin-local";
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DaemonInfo {

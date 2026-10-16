@@ -14,6 +14,7 @@ mod secret;
 mod service;
 mod settings;
 mod space;
+mod transport;
 
 use std::sync::Arc;
 

@@ -1,5 +1,3 @@
-use std::net::SocketAddr;
-
 use axum::Json;
 use axum::body::Bytes;
 use axum::extract::{ConnectInfo, Path, State};
@@ -9,16 +7,17 @@ use orrin_core::{Error, ErrorCode, Result};
 use serde_json::{Value, json};
 
 use crate::http::AppState;
-use crate::http::auth::{allow, identify};
+use crate::http::auth::{allow, allow_local, identify};
+use crate::transport::Remote;
 
 pub async fn call(
     State(state): State<AppState>,
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    ConnectInfo(remote): ConnectInfo<Remote>,
     Path(name): Path<String>,
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
-    let caller = identify(&state.hub, addr, &headers).await;
+    let caller = identify(&state, remote, &headers, None).await;
     let result = match allow(&caller, &name).and_then(|_| parse(&body)) {
         Ok(input) => state.registry.call(state.hub.clone(), &name, input).await,
         Err(err) => Err(err),
@@ -26,8 +25,13 @@ pub async fn call(
     reply(result)
 }
 
-pub async fn list(State(state): State<AppState>) -> Response {
-    reply(Ok(json!(state.registry.names())))
+pub async fn list(
+    State(state): State<AppState>,
+    ConnectInfo(remote): ConnectInfo<Remote>,
+    headers: HeaderMap,
+) -> Response {
+    let caller = identify(&state, remote, &headers, None).await;
+    reply(allow_local(&caller).map(|_| json!(state.registry.names())))
 }
 
 fn parse(body: &[u8]) -> Result<Value> {

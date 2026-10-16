@@ -1,5 +1,4 @@
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 
 use async_trait::async_trait;
 use orrin_core::api::{
@@ -8,13 +7,14 @@ use orrin_core::api::{
 };
 use orrin_core::model::{Pc, PcSettings};
 use orrin_core::service::{Hub, Peers, Service, Setup};
-use orrin_core::{Config, Error, Events, Hash, Home, Identity, PcId, ProjectId, Result};
+use orrin_core::{Config, Events, Hash, Home, Identity, PcId, ProjectId, Result};
 use serde_json::Value;
 
 use crate::book::Book;
 use crate::pairing::Pending;
 use crate::poke::{self, Pokes};
 use crate::rounds;
+use crate::transport::Transport;
 
 pub struct PeerService(Arc<Inner>);
 
@@ -28,17 +28,11 @@ pub(crate) struct Inner {
     pub pending: Mutex<Vec<Pending>>,
     pub following: tokio::sync::Mutex<()>,
     pub pokes: Pokes,
-    pub http: reqwest::Client,
+    pub transport: Transport,
 }
 
 impl PeerService {
     pub fn open(setup: &Setup) -> Result<Self> {
-        let http = reqwest::Client::builder()
-            .no_proxy()
-            .connect_timeout(Duration::from_secs(5))
-            .timeout(Duration::from_secs(120))
-            .build()
-            .map_err(|e| Error::internal(format!("http client: {e}")))?;
         Ok(Self(Arc::new(Inner {
             hub: setup.hub.clone(),
             home: setup.home.clone(),
@@ -49,7 +43,7 @@ impl PeerService {
             pending: Mutex::new(Vec::new()),
             following: tokio::sync::Mutex::new(()),
             pokes: Pokes::default(),
-            http,
+            transport: Transport::default(),
         })))
     }
 }
@@ -69,7 +63,7 @@ impl Peers for PeerService {
     }
 
     async fn pair(&self, _: PcsPair) -> Result<PcsPairOutput> {
-        Ok(self.0.pair())
+        self.0.pair()
     }
 
     async fn redeem(&self, input: PcsRedeem) -> Result<Pc> {
