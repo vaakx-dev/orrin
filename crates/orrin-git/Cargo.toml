@@ -7,3 +7,11 @@ license.workspace = true
 
 [dependencies]
 orrin-core.workspace = true
+async-trait.workspace = true
+gix.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
