@@ -121,6 +121,7 @@ impl Peers for Unavailable {
     async fn call(&self, _: &PcId, _: &str, _: Value) -> Result<Value> { self.err() }
     async fn pull(&self, _: &PcId, _: Vec<Hash>) -> Result<()> { self.err() }
     async fn push(&self, _: &PcId, _: Vec<Hash>) -> Result<()> { self.err() }
+    async fn refresh(&self, _: &PcId, _: &ProjectId) -> Result<()> { self.err() }
 }
 
 #[async_trait]

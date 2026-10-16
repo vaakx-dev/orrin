@@ -1,3 +1,4 @@
+use std::fs::Metadata;
 use std::path::Path;
 
 use orrin_core::Result;
@@ -10,6 +11,12 @@ use crate::inner::Inner;
 
 impl Inner {
     pub fn place(&self, kind: ViewKind, root: &Path, entry: &Entry, stats: &mut Stats) -> Result<()> {
+        let meta = self.write_entry(kind, root, entry)?;
+        stats.remember(&entry.path, &meta, entry.hash.clone());
+        Ok(())
+    }
+
+    pub fn write_entry(&self, kind: ViewKind, root: &Path, entry: &Entry) -> Result<Metadata> {
         let abs = root.join(&entry.path);
         if let Some(parent) = abs.parent() {
             std::fs::create_dir_all(parent)?;
@@ -24,6 +31,6 @@ impl Inner {
         if entry.mode == Mode::Executable && how == Materialise::Copy {
             set_executable(&abs)?;
         }
-        stats.remember_path(&entry.path, &abs, entry.hash.clone())
+        Ok(std::fs::metadata(&abs)?)
     }
 }

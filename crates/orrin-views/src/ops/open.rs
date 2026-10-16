@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 
 use orrin_core::api::{ProjectOpened, ProjectsImport, ViewCreate};
 use orrin_core::model::{Entry, Project, Snapshot, View, ViewKind, ViewState};
+use orrin_core::par::par_map;
 use orrin_core::service::{Edits, Store};
 use orrin_core::{Error, ProjectId, Result, ViewId, now_ms};
 
@@ -80,9 +81,10 @@ impl Inner {
 
     fn materialise_all(&self, snapshot: &Snapshot, root: &Path) -> Result<Stats> {
         std::fs::create_dir_all(root)?;
+        let written = par_map(&snapshot.entries, |entry| self.write_entry(ViewKind::Worker, root, entry));
         let mut stats = Stats::default();
-        for entry in &snapshot.entries {
-            self.place(ViewKind::Worker, root, entry, &mut stats)?;
+        for (entry, meta) in snapshot.entries.iter().zip(written) {
+            stats.remember(&entry.path, &meta?, entry.hash.clone());
         }
         Ok(stats)
     }

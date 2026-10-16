@@ -26,6 +26,18 @@ pub fn search_path(tools: &Tools) -> Option<OsString> {
     std::env::join_paths(dirs.chain(std::env::split_paths(&current))).ok()
 }
 
+pub fn command_line(command: &str, tools: &Tools) -> String {
+    let Some(program) = program(command) else { return command.to_string() };
+    let known = tools.iter().find_map(|(name, tool)| tool.as_ref().filter(|_| name.eq_ignore_ascii_case(&program)));
+    match known {
+        Some(tool) => {
+            let rest = command.trim_start().strip_prefix(program.as_str()).unwrap_or_default();
+            format!("\"{}\"{rest}", tool.path)
+        }
+        None => command.to_string(),
+    }
+}
+
 pub async fn learn(hub: &Services, command: &str, tools: &Tools) {
     let mut names: Vec<String> = tools.iter().filter(|(_, t)| t.is_none()).map(|(n, _)| n.clone()).collect();
     if let Some(program) = program(command) {
@@ -84,5 +96,17 @@ mod tests {
             program("\"C:/Program Files/Godot/godot.exe\" --export").as_deref(),
             Some("C:/Program Files/Godot/godot.exe")
         );
+    }
+
+    #[test]
+    fn runs_a_needed_tool_by_its_known_path() {
+        let path = "C:/Godot/godot.windows.opt.tools.64.exe".to_string();
+        let tool = Tool { name: "godot".into(), path, version: None, source: orrin_core::model::ToolSource::Registry };
+        let tools = vec![("godot".to_string(), Some(tool))];
+        assert_eq!(
+            command_line("godot --headless --quit", &tools),
+            "\"C:/Godot/godot.windows.opt.tools.64.exe\" --headless --quit"
+        );
+        assert_eq!(command_line("cargo build", &tools), "cargo build");
     }
 }

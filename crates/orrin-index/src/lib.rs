@@ -1,7 +1,6 @@
 mod analyse;
 mod engine;
 mod outline;
-mod par;
 mod query;
 mod records;
 mod service;

@@ -9,7 +9,7 @@ use gix::refs::transaction::PreviousValue;
 use orrin_core::{Error, Result};
 
 pub use read::{Imported, new_commits, read_commit};
-pub use write::{write_commit, write_snapshot};
+pub use write::{write_commit, write_snapshot, write_start};
 
 pub fn open(path: &Path) -> Result<gix::Repository> {
     if path.join("HEAD").exists() { gix::open(path).map_err(fail) } else { gix::init_bare(path).map_err(fail) }

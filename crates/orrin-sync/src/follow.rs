@@ -2,7 +2,7 @@ use std::collections::{BTreeSet, HashSet};
 
 use orrin_core::api::{Event, SyncChanges, ViewList};
 use orrin_core::model::{Change, Keep, Project, ViewKind, ViewState};
-use orrin_core::{Hash, Result};
+use orrin_core::{Error, Hash, PcId, ProjectId, Result};
 
 use crate::book::Peer;
 use crate::changes::history;
@@ -11,7 +11,17 @@ use crate::service::Inner;
 use crate::space::Space;
 
 impl Inner {
+    pub async fn refresh(&self, pc: &PcId, project: &ProjectId) -> Result<()> {
+        let peer = self.peer(pc)?;
+        let theirs = self.ask(pc, self.my_announce().await).await?;
+        let theirs = theirs.projects.into_iter().find(|p| p.id == *project);
+        let theirs = theirs.ok_or_else(|| Error::not_found(format!("{pc} does not announce {project}")))?;
+        let settings = self.my_settings();
+        self.follow(&peer, theirs, settings.keep, &mut Space::new(&settings)).await
+    }
+
     pub async fn follow(&self, peer: &Peer, theirs: Project, keep: Keep, space: &mut Space) -> Result<()> {
+        let _one_at_a_time = self.following.lock().await;
         if theirs.home_pc == self.me.pc || keep == Keep::None {
             return Ok(());
         }

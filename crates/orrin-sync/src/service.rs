@@ -8,7 +8,7 @@ use orrin_core::api::{
 };
 use orrin_core::model::{Pc, PcSettings};
 use orrin_core::service::{Hub, Peers, Service, Setup};
-use orrin_core::{Config, Error, Events, Hash, Home, Identity, PcId, Result};
+use orrin_core::{Config, Error, Events, Hash, Home, Identity, PcId, ProjectId, Result};
 use serde_json::Value;
 
 use crate::book::Book;
@@ -25,6 +25,7 @@ pub(crate) struct Inner {
     pub events: Events,
     pub book: Mutex<Book>,
     pub pending: Mutex<Vec<Pending>>,
+    pub following: tokio::sync::Mutex<()>,
     pub http: reqwest::Client,
 }
 
@@ -44,6 +45,7 @@ impl PeerService {
             events: setup.events.clone(),
             book: Mutex::new(Book::load(&setup.home)?),
             pending: Mutex::new(Vec::new()),
+            following: tokio::sync::Mutex::new(()),
             http,
         })))
     }
@@ -112,5 +114,9 @@ impl Peers for PeerService {
 
     async fn push(&self, pc: &PcId, hashes: Vec<Hash>) -> Result<()> {
         self.0.push(pc, hashes).await
+    }
+
+    async fn refresh(&self, pc: &PcId, project: &ProjectId) -> Result<()> {
+        self.0.refresh(pc, project).await
     }
 }

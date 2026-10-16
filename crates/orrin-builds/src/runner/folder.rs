@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use orrin_core::model::{Artifact, Mode, Snapshot, clean_path};
+use orrin_core::par::par_map;
 use orrin_core::service::{Materialise, Store};
 use orrin_core::{Hash, JobId, Result};
 
@@ -16,13 +17,15 @@ pub fn fresh(runs: &Path, id: &JobId) -> Result<PathBuf> {
 }
 
 pub fn fill(store: &dyn Store, dir: &Path, snapshot: &Snapshot, big: u64, extras: &[Artifact]) -> Result<()> {
-    for entry in &snapshot.entries {
+    let placed = par_map(&snapshot.entries, |entry| {
         let how = if entry.size > big { Materialise::Link } else { Materialise::Copy };
         let target = place(store, dir, &entry.path, &entry.hash, how)?;
-        if entry.mode == Mode::Executable {
-            executable(&target)?;
+        match entry.mode {
+            Mode::Executable => executable(&target),
+            _ => Ok(()),
         }
-    }
+    });
+    placed.into_iter().collect::<Result<()>>()?;
     for artifact in extras {
         place(store, dir, &artifact.path, &artifact.hash, Materialise::Copy)?;
     }

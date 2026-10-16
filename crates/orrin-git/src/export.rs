@@ -26,6 +26,15 @@ fn export(store: Arc<dyn Store>, target: &Target, changes: Vec<Change>) -> Resul
         None => repo::target(&repo, &target.branch_ref())?,
     };
     let pending = &changes[last.map_or(0, |i| i + 1)..];
+    let mut commits = pending.len() as u32;
+    if let (None, Some(first)) = (head, pending.first()) {
+        let snapshot = store.snapshot(&first.parent)?;
+        if !snapshot.entries.is_empty() {
+            let tree = repo::write_snapshot(&repo, store.as_ref(), &mut mapping, &snapshot)?;
+            head = Some(repo::write_start(&repo, tree, first)?);
+            commits += 1;
+        }
+    }
     for change in pending {
         let snapshot = store.snapshot(&change.snapshot)?;
         let tree = repo::write_snapshot(&repo, store.as_ref(), &mut mapping, &snapshot)?;
@@ -40,5 +49,5 @@ fn export(store: Arc<dyn Store>, target: &Target, changes: Vec<Change>) -> Resul
     if let (Some(remote), Some(_)) = (&target.remote, head) {
         remote::push(&target.repo, remote, &target.branch_ref())?;
     }
-    Ok(GitExportOutput { commits: pending.len() as u32, head: head.map(|h| h.to_string()) })
+    Ok(GitExportOutput { commits, head: head.map(|h| h.to_string()) })
 }

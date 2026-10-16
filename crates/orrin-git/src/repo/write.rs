@@ -38,15 +38,30 @@ pub fn write_commit(
     parent: Option<ObjectId>,
     change: &Change,
 ) -> Result<ObjectId> {
-    let signature = signature(&change.author, change.at);
     let intent = if change.intent.trim().is_empty() { "orrin change" } else { change.intent.trim() };
+    let message = format!("{intent}\n\nOrrin-Change: {}\n", change.id);
+    commit(repo, tree, parent, signature(&change.author, change.at), message)
+}
+
+pub fn write_start(repo: &gix::Repository, tree: ObjectId, before: &Change) -> Result<ObjectId> {
+    let message = format!("Starting point\n\nOrrin-Snapshot: {}\n", before.parent);
+    commit(repo, tree, None, signature("orrin", before.at), message)
+}
+
+fn commit(
+    repo: &gix::Repository,
+    tree: ObjectId,
+    parent: Option<ObjectId>,
+    signature: Signature,
+    message: String,
+) -> Result<ObjectId> {
     let commit = Commit {
         tree,
         parents: parent.into_iter().collect(),
         author: signature.clone(),
         committer: signature,
         encoding: None,
-        message: format!("{intent}\n\nOrrin-Change: {}\n", change.id).into(),
+        message: message.into(),
         extra_headers: Vec::new(),
     };
     Ok(repo.write_object(commit).map_err(fail)?.detach())

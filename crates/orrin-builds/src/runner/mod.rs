@@ -130,7 +130,13 @@ impl Run {
         let cores = self.ctx.queue.cores();
         let limits =
             Limits { cpu_percent: recipe.cpu.map(|c| c.saturating_mul(100) / cores), memory_mb: recipe.ram_mb };
-        Spec { command: recipe.command.clone(), args: self.plan.args.clone(), dir: PathBuf::from(dir), env, limits }
+        Spec {
+            command: tools::command_line(&recipe.command, &self.tools),
+            args: self.plan.args.clone(),
+            dir: PathBuf::from(dir),
+            env,
+            limits,
+        }
     }
 
     async fn cached_outputs(&self) -> Vec<Artifact> {

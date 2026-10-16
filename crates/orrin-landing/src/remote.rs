@@ -1,6 +1,6 @@
 use orrin_core::api::{LandOutput, Request};
 use orrin_core::service::{Services, call_peer};
-use orrin_core::{ErrorCode, PcId, Result};
+use orrin_core::{PcId, Result};
 
 pub async fn forward<R: Request<Output = LandOutput>>(hub: &Services, home: &PcId, input: R) -> Result<LandOutput> {
     let out = call_peer::<R>(&*hub.peers, home, input).await?;
@@ -13,14 +13,8 @@ pub async fn forward<R: Request<Output = LandOutput>>(hub: &Services, home: &PcI
 async fn adopt(hub: &Services, home: &PcId, out: &LandOutput) -> Result<()> {
     let theirs = out.conflicts.iter().flat_map(|c| c.theirs.iter().chain(c.base.iter()).cloned()).collect();
     hub.peers.pull(home, theirs).await?;
-    let Some(change) = &out.change else {
-        return Ok(());
-    };
-    hub.peers.pull(home, vec![out.main.clone()]).await?;
-    let files = hub.store.snapshot(&out.main)?.entries.into_iter().map(|e| e.hash).collect();
-    hub.peers.pull(home, files).await?;
-    match hub.projects.swap_main(change.clone()).await {
-        Err(err) if err.code == ErrorCode::Conflict => Ok(()),
-        other => other.map(|_| ()),
+    match &out.change {
+        Some(change) => hub.peers.refresh(home, &change.project).await,
+        None => Ok(()),
     }
 }

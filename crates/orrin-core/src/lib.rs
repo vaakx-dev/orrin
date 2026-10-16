@@ -8,6 +8,7 @@ pub mod home;
 pub mod id;
 pub mod identity;
 pub mod model;
+pub mod par;
 pub mod service;
 
 pub use clock::{Clock, Millis, now_ms};

@@ -9,8 +9,8 @@ use orrin_core::{Error, ErrorCode, Hash, ProjectId, Result, ViewId};
 
 use super::Engine;
 use crate::analyse::{Kind, MAX_INDEXED, Record, analyse};
-use crate::par::par_map;
 use crate::records::key;
+use orrin_core::par::par_map;
 
 pub struct Item {
     pub path: String,
