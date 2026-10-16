@@ -1,8 +1,21 @@
+mod chunks;
+mod disk;
+mod gc;
+mod materialise;
+mod object;
+mod read;
+mod service;
+mod verified;
+mod write;
+mod zipped;
+
 use std::sync::Arc;
 
 use orrin_core::Result;
-use orrin_core::service::{Setup, Store, Unavailable};
+use orrin_core::service::{Setup, Store};
 
-pub fn open(_setup: &Setup) -> Result<Arc<dyn Store>> {
-    Ok(Arc::new(Unavailable("store")))
+pub use disk::DiskStore;
+
+pub fn open(setup: &Setup) -> Result<Arc<dyn Store>> {
+    Ok(Arc::new(DiskStore::open(setup.home.store())?))
 }

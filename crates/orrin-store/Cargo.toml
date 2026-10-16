@@ -7,3 +7,12 @@ license.workspace = true
 
 [dependencies]
 orrin-core.workspace = true
+blake3.workspace = true
+fastcdc.workspace = true
+flate2 = "1.1"
+serde.workspace = true
+serde_json.workspace = true
+zip.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
