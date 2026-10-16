@@ -47,6 +47,16 @@ pub struct Job {
     pub created_at: Millis,
     pub started_at: Option<Millis>,
     pub finished_at: Option<Millis>,
+    #[serde(default)]
+    pub result: Option<Hash>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct JobResult {
+    pub exit_code: Option<i32>,
+    pub artifacts: Vec<Artifact>,
+    pub logs: Vec<LogLine>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]

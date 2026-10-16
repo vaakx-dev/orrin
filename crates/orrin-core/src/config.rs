@@ -14,6 +14,21 @@ pub struct Config {
     pub pc: PcSettings,
     pub history: HistoryConfig,
     pub views: ViewsConfig,
+    pub builds: BuildsConfig,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct BuildsConfig {
+    pub cpu: Option<u32>,
+    pub ram_mb: Option<u64>,
+    pub gpu: u32,
+}
+
+impl Default for BuildsConfig {
+    fn default() -> Self {
+        Self { cpu: None, ram_mb: None, gpu: 1 }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
