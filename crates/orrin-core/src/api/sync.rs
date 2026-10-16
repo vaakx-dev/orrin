@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 use crate::id::{ChangeId, Hash, JobId, PcId, ProjectId, SnapshotId};
-use crate::model::{Change, FileState, JobKind, Project};
+use crate::model::{Change, FileState, JobKind, PcSettings, Project};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -31,6 +31,8 @@ pub struct SyncAnnounce {
     #[serde(default)]
     pub address: Option<String>,
     pub projects: Vec<Project>,
+    #[serde(default)]
+    pub settings: PcSettings,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
