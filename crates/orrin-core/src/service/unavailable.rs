@@ -103,6 +103,7 @@ impl Builds for Unavailable {
     async fn logs(&self, _: JobLogs) -> Result<JobLogsOutput> { self.err() }
     async fn artifacts(&self, _: JobRef) -> Result<JobArtifactsOutput> { self.err() }
     async fn cancel(&self, _: JobRef) -> Result<Job> { self.err() }
+    async fn list(&self, _: JobList) -> Result<JobListOutput> { self.err() }
 }
 
 #[async_trait]

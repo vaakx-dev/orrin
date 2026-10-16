@@ -61,6 +61,7 @@ requests! {
     JobLogs => "job.logs": JobLogsOutput,
     JobArtifacts => "job.artifacts": JobArtifactsOutput,
     JobCancel => "job.cancel": Job,
+    JobList => "job.list": JobListOutput,
     PcsList => "pcs.list": PcsListOutput,
     PcsPair => "pcs.pair": PcsPairOutput,
     PcsRedeem => "pcs.redeem": Pc,

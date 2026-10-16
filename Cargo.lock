@@ -2561,11 +2561,14 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "futures-util",
  "orrin-core",
  "orrin-server",
  "reqwest",
+ "serde",
  "serde_json",
  "tokio",
+ "tokio-tungstenite 0.30.0",
  "tracing-subscriber",
 ]
 

@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::id::{JobId, PcId, ProjectId, ViewId};
-use crate::model::{Artifact, JobKind, LogLine};
+use crate::model::{Artifact, Job, JobKind, LogLine};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -69,6 +69,19 @@ pub struct JobLogs {
 pub struct JobLogsOutput {
     pub lines: Vec<LogLine>,
     pub done: bool,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct JobList {
+    #[serde(default)]
+    pub project: Option<ProjectId>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct JobListOutput {
+    pub jobs: Vec<Job>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
-use orrin_core::api::{JobArtifactsOutput, JobInput, JobLogs, JobLogsOutput, JobRef, SyncJob};
+use orrin_core::api::{JobArtifactsOutput, JobInput, JobList, JobListOutput, JobLogs, JobLogsOutput, JobRef, SyncJob};
 use orrin_core::model::{Job, JobKind};
 use orrin_core::service::{Builds, Service, Setup};
 use orrin_core::{Error, Result};
@@ -97,5 +97,10 @@ impl Builds for BuildService {
         }
         self.ctx.table.cancel(&input.job)?;
         self.ctx.table.wait_done(&input.job, CANCEL_WAIT).await
+    }
+
+    async fn list(&self, input: JobList) -> Result<JobListOutput> {
+        let jobs = self.ctx.table.jobs().into_iter().filter(|job| input.project.as_ref().is_none_or(|p| *p == job.project));
+        Ok(JobListOutput { jobs: jobs.collect() })
     }
 }

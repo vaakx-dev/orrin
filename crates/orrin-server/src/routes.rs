@@ -72,6 +72,7 @@ fn jobs(r: &mut Registry) {
     r.add(|h: Hub, i: api::JobLogs| async move { h.builds.logs(i).await });
     r.add(|h: Hub, i: api::JobArtifacts| async move { h.builds.artifacts(i.0).await });
     r.add(|h: Hub, i: api::JobCancel| async move { h.builds.cancel(i.0).await });
+    r.add(|h: Hub, i: api::JobList| async move { h.builds.list(i).await });
     r.add(|h: Hub, i: api::Facts| async move { h.facts.list(i).await });
     r.add(|h: Hub, i: api::FactsSet| async move { h.facts.set(i).await });
 }

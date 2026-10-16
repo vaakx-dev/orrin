@@ -117,6 +117,12 @@ impl Table {
         self.with(id, |entry| entry.job.clone())
     }
 
+    pub fn jobs(&self) -> Vec<Job> {
+        let mut jobs: Vec<Job> = self.inner.lock().unwrap().entries.values().map(|e| e.job.clone()).collect();
+        jobs.sort_by_key(|job| job.created_at);
+        jobs
+    }
+
     pub fn logs(&self, id: &JobId, after: u64, limit: usize) -> Result<JobLogsOutput> {
         self.with(id, |entry| JobLogsOutput {
             lines: entry.logs.iter().filter(|l| l.n > after).take(limit).cloned().collect(),
