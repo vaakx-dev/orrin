@@ -8,7 +8,7 @@ use orrin_core::api::{
     Changes, ChangesOutput, Create, Delete, Diff, DiffOutput, Done, Move, Patch, ProjectOpened, ProjectsImport, Read,
     ReadOutput, Touched, ViewCreate, ViewDrop, ViewList, ViewListOutput, Written,
 };
-use orrin_core::model::{Linked, View, ViewKind};
+use orrin_core::model::{Artifact, Delivered, Linked, View, ViewKind};
 use orrin_core::service::{Edits, Service, Views};
 use orrin_core::{ChangeId, ProjectId, Result, SnapshotId, ViewId};
 
@@ -134,5 +134,9 @@ impl Views for ViewsService {
 
     async fn link(&self, project: &ProjectId, linked: Linked) -> Result<()> {
         self.0.link(project, linked).await
+    }
+
+    async fn deliver(&self, project: &ProjectId, files: Vec<Artifact>) -> Result<Delivered> {
+        self.0.deliver(project, files).await
     }
 }

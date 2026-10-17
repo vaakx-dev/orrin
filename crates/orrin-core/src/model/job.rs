@@ -80,4 +80,6 @@ pub struct Artifact {
     pub path: String,
     pub hash: Hash,
     pub size: u64,
+    #[serde(default)]
+    pub modified: Option<Millis>,
 }

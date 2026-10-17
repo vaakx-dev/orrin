@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
 
@@ -20,6 +20,8 @@ pub struct ViewRecord {
     pub closed_at: Option<Millis>,
     #[serde(default)]
     pub linked: BTreeMap<String, SnapshotId>,
+    #[serde(default)]
+    pub delivered: BTreeSet<String>,
 }
 
 pub struct Slot {
@@ -41,7 +43,7 @@ impl Slot {
             project: view.project.clone(),
             kind: view.kind,
             root: std::path::absolute(&view.path).unwrap_or_else(|_| view.path.clone()),
-            rules: Mutex::new(Arc::new(Rules::load(&view.path, &[]))),
+            rules: Mutex::new(Arc::new(Rules::load(&view.path, &[], &record.delivered))),
             record: tokio::sync::Mutex::new(record),
             stats: Mutex::new(stats),
             watcher: Mutex::new(None),

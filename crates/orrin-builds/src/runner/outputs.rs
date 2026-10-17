@@ -19,8 +19,8 @@ pub fn collect(store: &dyn Store, dir: &Path, target: &Target, snapshot: &Snapsh
         if snapshot.get(&path).is_some_and(|e| e.hash == hash) {
             continue;
         }
-        let size = std::fs::metadata(&file).map(|m| m.len()).unwrap_or_default();
-        artifacts.push(Artifact { path, hash, size });
+        let meta = std::fs::metadata(&file)?;
+        artifacts.push(Artifact { path, hash, size: meta.len(), modified: files::modified(&meta) });
     }
     Ok(artifacts)
 }

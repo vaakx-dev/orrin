@@ -4,7 +4,7 @@ use std::sync::Mutex;
 
 use async_trait::async_trait;
 use orrin_core::api::*;
-use orrin_core::model::{Linked, View, ViewState};
+use orrin_core::model::{Artifact, Delivered, Linked, View, ViewState};
 use orrin_core::service::{Edits, Service, Views};
 use orrin_core::{ChangeId, Error, ProjectId, Result, SnapshotId, ViewId};
 
@@ -109,5 +109,9 @@ impl Views for FakeViews {
 
     async fn link(&self, _: &ProjectId, _: Linked) -> Result<()> {
         Ok(())
+    }
+
+    async fn deliver(&self, _: &ProjectId, _: Vec<Artifact>) -> Result<Delivered> {
+        Ok(Delivered::default())
     }
 }

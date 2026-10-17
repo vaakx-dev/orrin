@@ -61,6 +61,7 @@ pub struct Target {
     pub kind: Option<JobKind>,
     pub link_outputs: bool,
     pub scratch: Vec<String>,
+    pub deliver: bool,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -164,6 +165,7 @@ steps = [
 cpu = 12
 warm = 2
 kind = "build"
+deliver = true
 
 [targets.gen]
 command = "gen"
@@ -185,6 +187,7 @@ build = { command = "make" }
         assert_eq!(game.steps[0].files, ["game/**/*.cpp"]);
         assert_eq!(game.steps[1].input, [PREVIOUS]);
         assert_eq!(game.warm, Warm::Pool(2));
+        assert!(game.deliver && !manifest.targets["gen"].deliver);
         assert_eq!(manifest.packages["godot-cpp"].build, Some(PackageBuild::Target("lib".into())));
         assert!(matches!(&manifest.packages["inline"].build, Some(PackageBuild::Inline(t)) if t.command == "make"));
         assert!(Manifest::parse("[project]\nname = \"x\"\n").unwrap().targets.is_empty());

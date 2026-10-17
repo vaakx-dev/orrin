@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, RwLock};
 
@@ -145,8 +145,13 @@ impl Inner {
     }
 
     pub async fn refresh_rules(&self, slot: &Slot) -> Arc<Rules> {
+        let delivered = slot.record.lock().await.delivered.clone();
+        self.reload_rules(slot, &delivered).await
+    }
+
+    pub async fn reload_rules(&self, slot: &Slot, delivered: &BTreeSet<String>) -> Arc<Rules> {
         let settings = self.hub.projects.get(&slot.project).await.map(|p| p.settings.ignore).unwrap_or_default();
-        slot.set_rules(Rules::load(&slot.root, &settings))
+        slot.set_rules(Rules::load(&slot.root, &settings, delivered))
     }
 
     pub async fn touched(&self, slot: &Slot, paths: Vec<String>) -> Clock {

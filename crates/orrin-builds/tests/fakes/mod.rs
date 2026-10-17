@@ -1,5 +1,7 @@
 #![allow(dead_code)]
 
+mod views;
+
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -11,7 +13,9 @@ use orrin_core::model::{Change, Entry, Job, Project, ProjectSettings, Snapshot, 
 use orrin_core::service::{
     Builds, Facts, GcReport, Hub, Materialise, Projects, Service, Services, Setup, Store, Unavailable,
 };
-use orrin_core::{ChangeId, Config, Events, Hash, Home, Identity, JobId, ProjectId, Result};
+use orrin_core::{ChangeId, Config, Events, Hash, Home, Identity, JobId, ProjectId, Result, SnapshotId};
+
+pub use views::FakeViews;
 
 #[derive(Default)]
 pub struct FakeStore(Mutex<HashMap<Hash, Vec<u8>>>);
@@ -100,6 +104,7 @@ pub struct World {
     pub builds: Arc<dyn Builds>,
     pub store: Arc<FakeStore>,
     pub projects: Arc<FakeProjects>,
+    pub views: Arc<FakeViews>,
     pub project: ProjectId,
     pub setup: Setup,
 }
@@ -136,6 +141,7 @@ pub fn world(files: &[(&str, &str)]) -> World {
     };
     let id = project.id.clone();
     let projects = Arc::new(FakeProjects(Mutex::new(project)));
+    let views = Arc::new(FakeViews::default());
     setup.hub.set(Services {
         home: home.clone(),
         config: setup.config.clone(),
@@ -143,7 +149,7 @@ pub fn world(files: &[(&str, &str)]) -> World {
         events: setup.events.clone(),
         store: store.clone(),
         projects: projects.clone(),
-        views: Arc::new(Unavailable("views")),
+        views: views.clone(),
         landing: Arc::new(Unavailable("landing")),
         mergers: Vec::new(),
         index: Arc::new(Unavailable("index")),
@@ -155,12 +161,16 @@ pub fn world(files: &[(&str, &str)]) -> World {
         git: Arc::new(Unavailable("git")),
     });
     builds.start().unwrap();
-    World { _dir: dir, home, builds, store, projects, project: id, setup }
+    World { _dir: dir, home, builds, store, projects, views, project: id, setup }
 }
 
 impl World {
     pub fn change(&self, files: &[(&str, &str)]) {
         self.projects.0.lock().unwrap().main = snapshot(&self.store, files);
+    }
+
+    pub fn main(&self) -> SnapshotId {
+        self.projects.0.lock().unwrap().main.clone()
     }
 
     pub fn restart(&self) -> Arc<dyn Builds> {

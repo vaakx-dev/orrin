@@ -1,3 +1,4 @@
+mod delivery;
 mod files;
 mod index;
 mod job;
@@ -9,6 +10,7 @@ mod share;
 mod snapshot;
 mod view;
 
+pub use delivery::*;
 pub use files::*;
 pub use index::*;
 pub use job::*;

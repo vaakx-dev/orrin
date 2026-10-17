@@ -1,4 +1,5 @@
 mod cache;
+mod deliver;
 mod events;
 mod facts;
 mod files;
@@ -15,6 +16,7 @@ mod sync;
 mod views;
 
 pub use cache::*;
+pub use deliver::*;
 pub use events::*;
 pub use facts::*;
 pub use files::*;
@@ -30,7 +32,7 @@ pub use request::Request;
 pub use sync::*;
 pub use views::*;
 
-use crate::model::{Job, Pc, PcSettings, ProjectSettings, Tool, View};
+use crate::model::{Delivery, Job, Pc, PcSettings, ProjectSettings, Tool, View};
 use request::requests;
 
 requests! {
@@ -69,6 +71,8 @@ requests! {
     JobArtifacts => "job.artifacts": JobArtifactsOutput,
     JobCancel => "job.cancel": Job,
     JobList => "job.list": JobListOutput,
+    Deliver => "deliver": Delivery,
+    DeliveryStatus => "delivery.status": Delivery,
     PcsList => "pcs.list": PcsListOutput,
     PcsPair => "pcs.pair": PcsPairOutput,
     PcsRedeem => "pcs.redeem": Pc,

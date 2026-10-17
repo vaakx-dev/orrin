@@ -23,6 +23,7 @@ use crate::process::{self, Exit, Limits, Spec};
 use crate::queue::{Need, Slot};
 use crate::table::Claim;
 use crate::tools::{self, Tools};
+pub use folder::SCREENSHOTS;
 use packages::Placed;
 use placeholders::Values;
 use workspace::Workspace;

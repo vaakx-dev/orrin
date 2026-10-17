@@ -1,6 +1,7 @@
 mod advance;
 mod capture;
 mod close;
+mod deliver;
 mod link;
 mod open;
 mod place;

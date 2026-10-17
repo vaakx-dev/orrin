@@ -1,7 +1,7 @@
-use std::time::Duration;
+use std::time::{Duration, UNIX_EPOCH};
 
 use orrin_core::api::*;
-use orrin_core::model::{Change, Entry, FileStatus, Linked, SHARE_FROM, Snapshot, View, ViewState};
+use orrin_core::model::{Artifact, Change, Entry, FileStatus, Linked, SHARE_FROM, Snapshot, View, ViewState};
 use orrin_core::service::Projects;
 use orrin_core::{ChangeId, ProjectId, now_ms};
 
@@ -275,4 +275,40 @@ link_outputs = true
     assert!(!view.path.join("node_modules/old.js").exists());
     assert!(view.path.join("node_modules/.cache/hit").exists());
     assert!(rig.views.changes(Changes { project, view: view.id }).await.unwrap().files.is_empty());
+}
+
+#[tokio::test]
+async fn delivered_outputs_are_real_files_with_their_mtimes_and_stay_out_of_changes() {
+    let rig = Rig::new(1 << 20);
+    let opened = import(&rig, &[("a.txt", "a\n")]).await;
+    let (project, user) = (opened.project.id.clone(), opened.view.unwrap());
+    let built = UNIX_EPOCH + Duration::from_millis(1_600_000_000_000);
+    let file = |body: &str| Artifact {
+        path: "bin/x.dll".into(),
+        hash: rig.hub.store.put(body.as_bytes()).unwrap(),
+        size: body.len() as u64,
+        modified: Some(1_600_000_000_000),
+    };
+    let first = rig.views.deliver(&project, vec![file("v1")]).await.unwrap();
+    assert_eq!((first.copied, first.unchanged), (1, 0));
+    let dll = user.path.join("bin/x.dll");
+    let meta = std::fs::metadata(&dll).unwrap();
+    assert!(!meta.permissions().readonly());
+    assert_eq!(meta.modified().unwrap(), built);
+    let changes = rig.views.changes(Changes { project: project.clone(), view: user.id.clone() }).await.unwrap();
+    assert!(changes.files.is_empty());
+    let again = rig.views.deliver(&project, vec![file("v1")]).await.unwrap();
+    assert_eq!((again.copied, again.unchanged), (0, 1));
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        let held = std::fs::OpenOptions::new().read(true).share_mode(0).open(&dll).unwrap();
+        let busy = rig.views.deliver(&project, vec![file("v2")]).await.unwrap();
+        assert_eq!(busy.busy, ["bin/x.dll"]);
+        drop(held);
+    }
+    let done = rig.views.deliver(&project, vec![file("v2")]).await.unwrap();
+    assert_eq!((done.copied, done.busy.len()), (1, 0));
+    assert_eq!(std::fs::read_to_string(&dll).unwrap(), "v2");
 }

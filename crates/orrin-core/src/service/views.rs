@@ -9,7 +9,7 @@ use crate::api::{
 };
 use crate::error::Result;
 use crate::id::{ChangeId, ProjectId, SnapshotId, ViewId};
-use crate::model::{FileState, Linked, View};
+use crate::model::{Artifact, Delivered, FileState, Linked, View};
 use crate::service::Service;
 
 pub type Edits = BTreeMap<String, Option<FileState>>;
@@ -33,4 +33,5 @@ pub trait Views: Service {
     async fn advance(&self, id: &ViewId, snapshot: &SnapshotId) -> Result<Vec<String>>;
     async fn landed(&self, id: &ViewId, change: &ChangeId) -> Result<()>;
     async fn link(&self, project: &ProjectId, linked: Linked) -> Result<()>;
+    async fn deliver(&self, project: &ProjectId, files: Vec<Artifact>) -> Result<Delivered>;
 }

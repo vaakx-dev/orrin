@@ -67,7 +67,7 @@ mod tests {
     use super::*;
 
     fn artifact(path: &str) -> Artifact {
-        Artifact { path: path.into(), hash: Hash::of(path.as_bytes()), size: 1 }
+        Artifact { path: path.into(), hash: Hash::of(path.as_bytes()), size: 1, modified: None }
     }
 
     #[test]

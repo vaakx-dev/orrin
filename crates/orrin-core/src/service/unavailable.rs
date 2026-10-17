@@ -7,7 +7,9 @@ use crate::api::*;
 use crate::clock::Clock;
 use crate::error::{Error, Result};
 use crate::id::{ChangeId, Hash, PcId, ProjectId, SnapshotId, ViewId};
-use crate::model::{Change, Job, JobKind, Linked, Pc, PcSettings, Project, ProjectSettings, Tool, View};
+use crate::model::{
+    Artifact, Change, Delivered, Delivery, Job, JobKind, Linked, Pc, PcSettings, Project, ProjectSettings, Tool, View,
+};
 use crate::service::{
     Builds, Cache, Edits, Facts, GcReport, Git, Index, Landing, Materialise, PackageNeed, PackageReady, Packages,
     Peers, Projects, Service, Store, Views,
@@ -72,6 +74,7 @@ impl Views for Unavailable {
     async fn advance(&self, _: &ViewId, _: &SnapshotId) -> Result<Vec<String>> { self.err() }
     async fn landed(&self, _: &ViewId, _: &ChangeId) -> Result<()> { self.err() }
     async fn link(&self, _: &ProjectId, _: Linked) -> Result<()> { Ok(()) }
+    async fn deliver(&self, _: &ProjectId, _: Vec<Artifact>) -> Result<Delivered> { self.err() }
 }
 
 #[async_trait]
@@ -111,6 +114,8 @@ impl Builds for Unavailable {
     async fn clean(&self) -> Result<u32> { Ok(0) }
     async fn roots(&self) -> Result<Vec<Hash>> { Ok(Vec::new()) }
     async fn linked(&self, _: &ProjectId) -> Result<Vec<Linked>> { Ok(Vec::new()) }
+    async fn deliver(&self, _: &ProjectId) -> Result<Delivery> { self.err() }
+    async fn delivery(&self, _: &ProjectId) -> Result<Delivery> { self.err() }
 }
 
 #[async_trait]

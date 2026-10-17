@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -25,20 +25,21 @@ pub struct Rules {
     root: PathBuf,
     matchers: Matchers,
     include_bases: Vec<String>,
+    delivered: BTreeSet<String>,
 }
 
 impl Rules {
-    pub fn load(root: &Path, settings: &[String]) -> Self {
+    pub fn load(root: &Path, settings: &[String], delivered: &BTreeSet<String>) -> Self {
         let manifest = read_manifest(root);
         let mut git = GitignoreBuilder::new(root);
         if root.join(".gitignore").is_file() {
             git.add(root.join(".gitignore"));
         }
-        let linked = manifest.targets.into_values().filter(|t| t.link_outputs).flat_map(|t| [t.outputs, t.scratch]);
+        let built = manifest.targets.into_values().filter(|t| t.link_outputs || t.deliver);
         let extra = [".git/".to_string()]
             .into_iter()
             .chain(manifest.ignore)
-            .chain(linked.flatten())
+            .chain(built.flat_map(|t| [t.outputs, t.scratch]).flatten())
             .chain(settings.iter().cloned());
         let matchers = Matchers {
             git: Arc::new(git.build().unwrap_or_else(|_| Gitignore::empty())),
@@ -48,11 +49,11 @@ impl Rules {
         let mut include_bases: Vec<String> = manifest.include.iter().map(|p| literal_base(p)).collect();
         include_bases.sort();
         include_bases.dedup();
-        Self { root: root.to_path_buf(), matchers, include_bases }
+        Self { root: root.to_path_buf(), matchers, include_bases, delivered: delivered.clone() }
     }
 
     pub fn ignores(&self, rel: &str, is_dir: bool) -> bool {
-        is_temp(rel) || self.matchers.ignores(Path::new(rel), is_dir)
+        is_temp(rel) || self.delivered.contains(rel) || self.matchers.ignores(Path::new(rel), is_dir)
     }
 
     pub fn walk(&self) -> Vec<Found> {
@@ -70,7 +71,7 @@ impl Rules {
         });
         let mut found = BTreeMap::new();
         for (abs, meta) in main.into_iter().chain(included) {
-            if let Some(rel) = rel_path(&self.root, &abs) {
+            if let Some(rel) = rel_path(&self.root, &abs).filter(|rel| !self.delivered.contains(rel)) {
                 found.entry(rel.clone()).or_insert(Found { rel, abs, meta });
             }
         }

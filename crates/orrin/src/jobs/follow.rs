@@ -1,13 +1,13 @@
 use anyhow::bail;
 use futures_util::StreamExt;
 use orrin_core::api::{Event, EventEnvelope, JobLogs, JobRef, JobStatus};
-use orrin_core::daemon::DaemonInfo;
+use orrin_core::JobId;
 use orrin_core::model::{Job, JobState, LogLine, Stream};
-use orrin_core::{Home, JobId};
 use tokio_tungstenite::tungstenite::Message;
 
 use super::show;
 use crate::api::Api;
+use crate::client::events_url;
 use crate::exit::Outcome;
 
 pub async fn follow(api: &Api, job: &JobId) -> anyhow::Result<Outcome> {
@@ -64,9 +64,4 @@ fn print_line(api: &Api, line: &LogLine) -> anyhow::Result<()> {
         (false, _) => println!("{}", show::line(line)),
     }
     Ok(())
-}
-
-fn events_url(home: &Home) -> anyhow::Result<String> {
-    let base = DaemonInfo::read(home)?.url().replacen("http", "ws", 1);
-    Ok(format!("{base}/events?key={}", home.local_key()?))
 }

@@ -23,7 +23,7 @@ impl Inner {
         self.ensure_free(&root).await?;
         let name = input.name.unwrap_or_else(|| folder_name(&root));
         let mut stats = Stats::default();
-        let rules = Rules::load(&root, &[]);
+        let rules = Rules::load(&root, &[], &BTreeSet::new());
         let snapshot = pools::files().install(|| snapshot_folder(&*self.hub.store, &rules, &mut stats))?;
         let main = self.hub.store.put_snapshot(&snapshot)?;
         let project = Project {
@@ -76,8 +76,13 @@ impl Inner {
     }
 
     async fn open_view(&self, view: View, stats: Stats, clean: bool) -> Result<View> {
-        let record =
-            ViewRecord { view: view.clone(), captured: Edits::new(), closed_at: None, linked: BTreeMap::new() };
+        let record = ViewRecord {
+            view: view.clone(),
+            captured: Edits::new(),
+            closed_at: None,
+            linked: BTreeMap::new(),
+            delivered: BTreeSet::new(),
+        };
         self.save(&record)?;
         let slot = Slot::new(record, stats);
         self.save_stats(&slot)?;

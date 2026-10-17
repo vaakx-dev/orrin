@@ -1,5 +1,6 @@
 mod cache;
 mod context;
+mod deliver;
 mod journal;
 mod key;
 mod linked;

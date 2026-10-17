@@ -1,6 +1,7 @@
 mod api;
 mod cli;
 mod client;
+mod deliver;
 mod exit;
 mod index;
 mod jobs;
@@ -59,6 +60,7 @@ async fn run(cli: Cli) -> anyhow::Result<Outcome> {
         Command::Outline(scoped) => index::outline(&api, &scoped).await,
         Command::Where { tool } => index::locate_tool(&api, &tool).await,
         Command::Jobs { project } => jobs::list(&api, project.as_deref()).await,
+        Command::Deliver { project, status } => deliver::deliver(&api, project.as_deref(), status).await,
         Command::Logs { job, follow } => jobs::logs(&api, &job, follow).await,
         Command::Pcs => pcs::list(&api).await,
         Command::Pair => pcs::pair(&api).await,

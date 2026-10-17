@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 
 use orrin_core::api::{ChangedFile, Changes, ChangesOutput, Diff, DiffOutput};
 use orrin_core::model::{Entry, FileState, FileStatus, Snapshot};
@@ -16,7 +16,7 @@ impl Inner {
         let rules = self.refresh_rules(&slot).await;
         let mut record = slot.record.lock().await;
         let base = self.hub.store.snapshot(&record.view.base)?;
-        let edits = self.scan(&slot, &rules, &base)?;
+        let edits = self.scan(&slot, &rules, &base, &record.delivered)?;
         if record.captured != edits {
             record.captured = edits.clone();
             self.save(&record)?;
@@ -25,9 +25,9 @@ impl Inner {
         Ok(edits)
     }
 
-    fn scan(&self, slot: &Slot, rules: &Rules, base: &Snapshot) -> Result<Edits> {
+    fn scan(&self, slot: &Slot, rules: &Rules, base: &Snapshot, delivered: &BTreeSet<String>) -> Result<Edits> {
         let mut edits = Edits::new();
-        let mut seen = HashSet::new();
+        let mut seen: HashSet<String> = delivered.iter().cloned().collect();
         let found = rules.walk();
         let mut stats = slot.stats();
         for (found, state) in found.iter().zip(stats.states(&found)?) {

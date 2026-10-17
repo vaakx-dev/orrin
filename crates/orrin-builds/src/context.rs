@@ -3,6 +3,7 @@ use orrin_core::service::{Hub, Setup};
 use orrin_core::{Config, Home, Identity, Result};
 
 use crate::cache::Cache;
+use crate::deliver::Deliveries;
 use crate::journal::Journal;
 use crate::linked::Links;
 use crate::queue::Queue;
@@ -19,6 +20,7 @@ pub struct Context {
     pub cache: Cache,
     pub warm: Pool,
     pub links: Links,
+    pub deliveries: Deliveries,
 }
 
 impl Context {
@@ -33,6 +35,7 @@ impl Context {
             cache: Cache::new(setup.home.dir("builds/cache")?),
             warm: Pool::default(),
             links: Links::new(setup.home.dir("builds/linked")?),
+            deliveries: Deliveries::default(),
         })
     }
 

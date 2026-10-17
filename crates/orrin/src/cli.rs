@@ -73,6 +73,12 @@ pub enum Command {
     Jobs {
         project: Option<String>,
     },
+    #[command(about = "Build the deliver targets on main and copy their outputs into the user folder")]
+    Deliver {
+        project: Option<String>,
+        #[arg(long, help = "Show the last delivery instead of starting one")]
+        status: bool,
+    },
     Logs {
         job: String,
         #[arg(short = 'f', long)]

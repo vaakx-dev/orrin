@@ -1,8 +1,10 @@
 use std::collections::BTreeSet;
+use std::fs::Metadata;
 use std::path::{Path, PathBuf};
+use std::time::UNIX_EPOCH;
 
 use globset::{Glob, GlobSet, GlobSetBuilder};
-use orrin_core::{Error, Result};
+use orrin_core::{Error, Millis, Result};
 use walkdir::WalkDir;
 
 pub fn globs(patterns: &[String]) -> Result<GlobSet> {
@@ -12,6 +14,11 @@ pub fn globs(patterns: &[String]) -> Result<GlobSet> {
         builder.add(glob);
     }
     builder.build().map_err(|err| Error::invalid(err.to_string()))
+}
+
+pub fn modified(meta: &Metadata) -> Option<Millis> {
+    let since = meta.modified().ok()?.duration_since(UNIX_EPOCH).ok()?;
+    Some(since.as_millis() as Millis)
 }
 
 pub fn walk(dir: &Path, patterns: &[String]) -> BTreeSet<String> {

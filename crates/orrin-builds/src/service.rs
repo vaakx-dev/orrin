@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use orrin_core::api::{JobArtifactsOutput, JobInput, JobList, JobListOutput, JobLogs, JobLogsOutput, JobRef, SyncJob};
-use orrin_core::model::{Job, JobKind, Linked};
+use orrin_core::model::{Delivery, Job, JobKind, Linked};
 use orrin_core::service::{Builds, Service, Setup};
 use orrin_core::{Error, Hash, ProjectId, Result};
 
@@ -12,7 +12,7 @@ use crate::plan::{Plan, Request};
 use crate::remote::{self, Place};
 use crate::roots;
 use crate::runner::steps::Records;
-use crate::{recover, runner, source};
+use crate::{deliver, recover, runner, source};
 
 const CANCEL_WAIT: Duration = Duration::from_secs(5);
 const DAY_SECS: u64 = 24 * 60 * 60;
@@ -36,6 +36,7 @@ impl Service for BuildService {
             std::fs::remove_dir_all(&runs)?;
         }
         std::fs::create_dir_all(runs)?;
+        deliver::follow(&self.ctx);
         recover::restore(&self.ctx)
     }
 }
@@ -124,5 +125,14 @@ impl Builds for BuildService {
 
     async fn linked(&self, project: &ProjectId) -> Result<Vec<Linked>> {
         Ok(self.ctx.links.all(project))
+    }
+
+    async fn deliver(&self, project: &ProjectId) -> Result<Delivery> {
+        let started = deliver::start(&self.ctx, project, true).await?;
+        started.ok_or_else(|| Error::invalid(format!("{project} has nothing to deliver")))
+    }
+
+    async fn delivery(&self, project: &ProjectId) -> Result<Delivery> {
+        self.ctx.deliveries.last(project)
     }
 }

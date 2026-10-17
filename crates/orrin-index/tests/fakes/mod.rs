@@ -224,6 +224,9 @@ impl Views for FolderViews {
     async fn link(&self, _: &ProjectId, _: Linked) -> Result<()> {
         nope()
     }
+    async fn deliver(&self, _: &ProjectId, _: Vec<Artifact>) -> Result<Delivered> {
+        nope()
+    }
 }
 
 pub struct OneTool;

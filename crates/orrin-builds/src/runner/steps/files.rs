@@ -33,14 +33,18 @@ pub fn keep(store: &dyn Store, dir: &Path, out: Option<&str>, also: &[String]) -
     if let Some(out) = out {
         let file = inside(dir, out)?;
         let meta = std::fs::metadata(&file).map_err(|_| Error::invalid(format!("the step did not write {out}")))?;
-        kept.push(Artifact { path: out.to_string(), hash: store.put_file(&file)?, size: meta.len() });
+        kept.push(artifact(store, &file, out.to_string(), &meta)?);
     }
     for path in extras(dir, also)?.into_iter().filter(|path| Some(path.as_str()) != out) {
         let file = inside(dir, &path)?;
-        let size = std::fs::metadata(&file)?.len();
-        kept.push(Artifact { hash: store.put_file(&file)?, path, size });
+        let meta = std::fs::metadata(&file)?;
+        kept.push(artifact(store, &file, path, &meta)?);
     }
     Ok(kept)
+}
+
+fn artifact(store: &dyn Store, file: &Path, path: String, meta: &std::fs::Metadata) -> Result<Artifact> {
+    Ok(Artifact { hash: store.put_file(file)?, path, size: meta.len(), modified: paths::modified(meta) })
 }
 
 fn extras(dir: &Path, also: &[String]) -> Result<Vec<String>> {

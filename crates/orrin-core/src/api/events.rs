@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::clock::{Clock, Millis};
 use crate::id::{ChangeId, JobId, ProjectId, SnapshotId, ViewId};
-use crate::model::{Conflict, Job, LogLine, Pc, Project};
+use crate::model::{Conflict, Delivery, Job, LogLine, Pc, Project};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", deny_unknown_fields)]
@@ -25,6 +25,8 @@ pub enum Event {
     Job { job: Job },
     #[serde(rename = "job.log")]
     JobLog { job: JobId, line: LogLine },
+    #[serde(rename = "delivery")]
+    Delivery { delivery: Delivery },
     #[serde(rename = "pc.seen")]
     PcSeen { pc: Pc },
     #[serde(rename = "maintenance")]
