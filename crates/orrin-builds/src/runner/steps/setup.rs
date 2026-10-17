@@ -16,13 +16,13 @@ pub async fn capture(
     dir: &Path,
     env: &[(String, OsString)],
     cancel: watch::Receiver<bool>,
-) -> Result<Delta> {
+) -> Result<(Delta, bool)> {
     let path = std::env::var_os("PATH").unwrap_or_default();
     let given = env.iter().find(|(name, _)| name == "PATH").map_or(&path, |(_, value)| value);
     let cached =
         home.dir("builds/setup")?.join(Hash::of(format!("{line}\n{}", given.to_string_lossy()).as_bytes()).as_str());
     if let Some(delta) = std::fs::read(&cached).ok().and_then(|bytes| serde_json::from_slice(&bytes).ok()) {
-        return Ok(delta);
+        return Ok((delta, false));
     }
     let spec = Spec {
         command: dump(line),
@@ -43,7 +43,7 @@ pub async fn capture(
     }
     let delta = delta(&base(env), &printed);
     std::fs::write(&cached, serde_json::to_vec(&delta)?)?;
-    Ok(delta)
+    Ok((delta, true))
 }
 
 fn base(env: &[(String, OsString)]) -> BTreeMap<String, String> {

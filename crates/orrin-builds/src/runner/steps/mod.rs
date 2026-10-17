@@ -84,8 +84,11 @@ pub async fn build(build: Build<'_>) -> Result<Built> {
 
 async fn capture(build: &Build<'_>, line: &str) -> Result<setup::Delta> {
     let line = tools::command_line(line, build.tools);
-    build.ctx.table.log(build.id, Stream::System, format!("setup: {line}"));
-    setup::capture(&build.ctx.home, &line, build.dir, build.env, build.cancel.clone()).await
+    let (delta, fresh) = setup::capture(&build.ctx.home, &line, build.dir, build.env, build.cancel.clone()).await?;
+    if fresh {
+        build.ctx.table.log(build.id, Stream::System, format!("setup: ran {line}"));
+    }
+    Ok(delta)
 }
 
 struct Group<'a> {

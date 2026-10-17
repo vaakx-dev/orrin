@@ -81,7 +81,11 @@ impl Group<'_> {
 
     async fn execute(&self, task: &Task, command: &str, limits: Limits) -> Result<Result<Vec<String>, Exit>> {
         let (table, id, dir) = (&self.build.ctx.table, self.build.id, self.build.dir);
-        let label = task.inputs.first().or(task.out.as_ref()).map_or(String::new(), |path| format!(" {path}"));
+        let label = match (task.inputs.as_slice(), &task.out) {
+            ([one], _) => format!(" {one}"),
+            (_, Some(out)) => format!(" {out}"),
+            _ => String::new(),
+        };
         table.log(id, Stream::System, format!("[{}]{label}", self.name));
         if let Some(out) = &task.out {
             files::clear(dir, out)?;
