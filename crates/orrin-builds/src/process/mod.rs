@@ -137,7 +137,11 @@ fn quote(arg: &str) -> String {
 
 #[cfg(not(windows))]
 fn shell(spec: &Spec) -> Command {
+    let line = match spec.args.is_empty() {
+        true => spec.command.clone(),
+        false => format!("{} \"$@\"", spec.command),
+    };
     let mut command = Command::new("sh");
-    command.arg("-c").arg(format!("{} \"$@\"", spec.command)).arg("sh").args(&spec.args);
+    command.arg("-c").arg(line).arg("sh").args(&spec.args);
     command
 }
