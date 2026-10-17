@@ -125,18 +125,28 @@ impl Run {
         }
     }
 
-    async fn execute(&self, extras: Vec<Artifact>, cancel: watch::Receiver<bool>) -> Result<(Exit, Vec<Artifact>)> {
-        let files = inputs(&self.plan.snapshot, extras);
-        let workspace = Workspace::prepare(&self.ctx, &self.plan, &self.id, files.entries.clone()).await?;
-        let outcome = self.execute_in(workspace.dir(), files, cancel).await;
-        workspace.close().await;
+    async fn execute(&self, extras: Vec<Artifact>, mut cancel: watch::Receiver<bool>) -> Result<(Exit, Vec<Artifact>)> {
+        let files = Arc::new(inputs(&self.plan.snapshot, extras));
+        let prepare = Workspace::prepare(&self.ctx, &self.plan, &self.id, files.clone());
+        let mut workspace = tokio::select! {
+            workspace = prepare => workspace?,
+            _ = cancel.wait_for(|c| *c) => return Ok((Exit::Cancelled, Vec::new())),
+        };
+        let outcome = match workspace.share(&self.ctx, &self.plan, &self.id, &files.entries).await {
+            Ok(()) => self.execute_in(workspace.dir(), files, cancel).await,
+            Err(err) => Err(err),
+        };
+        if matches!(outcome, Ok((Exit::Code(Some(0)), _))) {
+            workspace.built(&self.key);
+        }
+        workspace.close();
         outcome
     }
 
     async fn execute_in(
         &self,
         dir: &Path,
-        files: Snapshot,
+        files: Arc<Snapshot>,
         cancel: watch::Receiver<bool>,
     ) -> Result<(Exit, Vec<Artifact>)> {
         let spec = self.spec(dir).await?;
@@ -204,6 +214,10 @@ impl Run {
                     job.result = Some(hash);
                     job.finished_at = Some(now_ms());
                 });
+                if ok {
+                    let (ctx, plan, tools) = (self.ctx.clone(), self.plan.clone(), self.tools.clone());
+                    tokio::spawn(async move { tools::learn(&ctx.hub, &plan.recipe.command, &tools).await });
+                }
             }
             Err(err) => {
                 self.ctx.table.log(&self.id, Stream::System, err.to_string());
@@ -227,9 +241,6 @@ impl Run {
         self.ctx.table.set_artifacts(&self.id, artifacts);
         if ok && self.plan.cacheable() {
             self.ctx.cache.put(&self.key, &hash)?;
-        }
-        if ok {
-            tools::learn(&self.ctx.hub, &self.plan.recipe.command, &self.tools).await;
         }
         Ok(hash)
     }

@@ -39,7 +39,13 @@ pub fn write(store: &dyn Store, dir: &Path, entry: &Entry, how: Materialise) -> 
     Ok(target)
 }
 
-pub fn remove(dir: &Path) {
+pub fn discard(dir: PathBuf) {
+    let trash = dir.with_extension("trash");
+    let doomed = if std::fs::rename(&dir, &trash).is_ok() { trash } else { dir };
+    std::thread::spawn(move || remove(&doomed));
+}
+
+fn remove(dir: &Path) {
     if let Err(err) = std::fs::remove_dir_all(dir) {
         tracing::warn!("could not remove run folder {}: {err}", dir.display());
     }

@@ -104,7 +104,31 @@ pub struct Recipe {
     pub gpu: bool,
     pub after: Vec<String>,
     pub cache: CompilerCache,
-    pub warm: bool,
+    pub warm: Warm,
+    pub share: Vec<String>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum Warm {
+    On(bool),
+    Pool(u32),
+}
+
+impl Default for Warm {
+    fn default() -> Self {
+        Self::On(false)
+    }
+}
+
+impl Warm {
+    pub fn pool(self, default: u32) -> Option<u32> {
+        match self {
+            Self::On(true) => Some(default.max(1)),
+            Self::Pool(size) if size > 0 => Some(size),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]

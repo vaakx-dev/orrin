@@ -18,6 +18,8 @@ mod cmd {
     pub const OTHER: &str = "echo other> other.txt";
     pub const APP: &str = "type lib.txt > app.out & if exist other.txt echo leaked> leak.out";
     pub const WARM: &str = "echo {recipe}>> stamp.out";
+    pub const LIB_OBJ: &str = "mkdir obj & echo obj> obj\\x.o & echo built> lib.txt";
+    pub const USE_OBJ: &str = "type obj\\x.o > app.out";
 }
 
 #[cfg(not(windows))]
@@ -30,6 +32,8 @@ mod cmd {
     pub const OTHER: &str = "echo other > other.txt";
     pub const APP: &str = "cat lib.txt > app.out; if [ -f other.txt ]; then echo leaked > leak.out; fi";
     pub const WARM: &str = "echo {recipe} >> stamp.out";
+    pub const LIB_OBJ: &str = "mkdir -p obj; echo obj > obj/x.o; echo built > lib.txt";
+    pub const USE_OBJ: &str = "cat obj/x.o > app.out";
 }
 
 fn manifest(name: &str, command: &str) -> String {
@@ -80,7 +84,7 @@ async fn runs_in_a_fresh_folder_from_the_snapshot() {
     assert_eq!(get("b.txt").trim(), "from the snapshot");
     assert!(!artifacts.iter().any(|a| a.path == "a.txt"));
     assert!(!run_dir.exists());
-    let logs = w.builds.logs(JobLogs { job: job.id, after: None, limit: None }).await.unwrap();
+    let logs = w.builds.logs(JobLogs { job: job.id, after: None, limit: None, wait_ms: None }).await.unwrap();
     assert!(logs.done && logs.lines[0].text.starts_with("$ "));
 }
 
@@ -125,6 +129,33 @@ async fn after_brings_only_its_outputs() {
     assert_eq!(built.len(), 1, "{built:?}");
     assert_eq!(built[0].0, "app.out");
     assert_eq!(built[0].1.trim(), "built");
+    let app = job_of(&w, "app").await;
+    assert!(log_text(&w, &app).await.iter().any(|line| line.starts_with("[lib] $ ")));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn share_carries_build_files_from_the_after_warm_folder() {
+    let manifest = format!(
+        "[recipes.lib]\ncommand = '{}'\noutputs = [\"lib.txt\"]\nwarm = true\n\
+         [recipes.app]\ncommand = '{}'\noutputs = [\"*.out\"]\nafter = [\"lib\"]\nwarm = 2\nshare = [\"obj/**\"]\n",
+        cmd::LIB_OBJ,
+        cmd::USE_OBJ
+    );
+    let w = world(&[("orrin.toml", &manifest)]);
+    let built = outputs(&w, JobKind::Build, "app").await;
+    assert_eq!(built[0].1.trim(), "obj", "{built:?}");
+    let logs = log_text(&w, &job_of(&w, "app").await).await;
+    assert!(logs.iter().any(|line| line == "share from lib: 1 copied, 0 already in place"), "{logs:?}");
+}
+
+async fn job_of(w: &World, recipe: &str) -> orrin_core::JobId {
+    let jobs = w.builds.list(Default::default()).await.unwrap().jobs;
+    jobs.into_iter().rev().find(|job| job.recipe == recipe).unwrap().id
+}
+
+async fn log_text(w: &World, job: &orrin_core::JobId) -> Vec<String> {
+    let ask = JobLogs { job: job.clone(), after: None, limit: None, wait_ms: Some(10) };
+    w.builds.logs(ask).await.unwrap().lines.into_iter().map(|line| line.text).collect()
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -147,7 +178,7 @@ async fn finished_jobs_survive_a_restart() {
 
     let builds = w.restart();
     assert_eq!(builds.status(JobRef { job: job.id.clone() }).await.unwrap(), job);
-    let logs = builds.logs(JobLogs { job: job.id.clone(), after: None, limit: None }).await.unwrap();
+    let logs = builds.logs(JobLogs { job: job.id.clone(), after: None, limit: None, wait_ms: None }).await.unwrap();
     assert!(logs.done && logs.lines[0].text.starts_with("$ "));
     assert_eq!(builds.artifacts(JobRef { job: job.id }).await.unwrap().artifacts, before);
 }

@@ -1,8 +1,10 @@
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
+use std::time::Duration;
 
-use orrin_core::model::{Artifact, JobState, Stream};
+use futures_util::future::try_join_all;
+use orrin_core::model::{Artifact, Job, JobState, Stream};
 use orrin_core::{Error, Hash, JobId, Result};
 
 use crate::context::Context;
@@ -11,6 +13,9 @@ use crate::plan::{Plan, tool_names};
 use crate::tools;
 
 type Boxed<'a, T> = Pin<Box<dyn Future<Output = Result<T>> + Send + 'a>>;
+
+const PAGE: usize = 1000;
+const WAIT: Duration = Duration::from_secs(30);
 
 pub fn key<'a>(ctx: &'a Context, plan: &'a Plan, name: &'a str, args: &'a [String]) -> Boxed<'a, Hash> {
     Box::pin(async move {
@@ -25,12 +30,16 @@ pub fn key<'a>(ctx: &'a Context, plan: &'a Plan, name: &'a str, args: &'a [Strin
 }
 
 pub async fn outputs(ctx: &Arc<Context>, plan: &Plan, id: &JobId) -> Result<Vec<Artifact>> {
-    let mut artifacts = Vec::new();
+    let mut started = Vec::new();
     for name in &plan.recipe.after {
         let job = submit(ctx.clone(), plan.sibling(name)?).await?;
         let how = if job.cached { "reused".to_string() } else { format!("job {}", job.id) };
         ctx.table.log(id, Stream::System, format!("after {name}: {how}"));
-        let job = ctx.table.done(&job.id).await?;
+        started.push((name.as_str(), job));
+    }
+    let jobs = try_join_all(started.iter().map(|(name, job)| relay(ctx, id, name, job))).await?;
+    let mut artifacts = Vec::new();
+    for (name, job) in plan.recipe.after.iter().zip(jobs) {
         if job.state != JobState::Succeeded {
             return Err(Error::invalid(format!("after {name}: job {} did not succeed", job.id)));
         }
@@ -39,6 +48,24 @@ pub async fn outputs(ctx: &Arc<Context>, plan: &Plan, id: &JobId) -> Result<Vec<
     Ok(artifacts)
 }
 
-fn submit(ctx: Arc<Context>, plan: Plan) -> Boxed<'static, orrin_core::model::Job> {
+async fn relay(ctx: &Context, parent: &JobId, name: &str, job: &Job) -> Result<Job> {
+    if job.cached {
+        return Ok(job.clone());
+    }
+    let mut after = 0;
+    loop {
+        let page = ctx.table.wait_logs(&job.id, after, PAGE, WAIT).await?;
+        let full = page.lines.len() >= PAGE;
+        for line in page.lines {
+            after = line.n;
+            ctx.table.log(parent, line.stream, format!("[{name}] {}", line.text));
+        }
+        if page.done && !full {
+            return ctx.table.job(&job.id);
+        }
+    }
+}
+
+fn submit(ctx: Arc<Context>, plan: Plan) -> Boxed<'static, Job> {
     Box::pin(async move { super::submit(&ctx, plan).await })
 }

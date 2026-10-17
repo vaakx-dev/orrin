@@ -112,7 +112,7 @@ fn shell(spec: &Spec) -> Command {
         line.push(' ');
         line.push_str(&join_args(&spec.args));
     }
-    let mut command = Command::new("cmd");
+    let mut command = Command::new(std::env::var_os("ComSpec").unwrap_or_else(|| "cmd".into()));
     command.args(["/D", "/S", "/C"]).raw_arg(format!("\"{line}\""));
     command
 }

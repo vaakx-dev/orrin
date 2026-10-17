@@ -15,6 +15,7 @@ use crate::{recover, runner, source};
 
 const CANCEL_WAIT: Duration = Duration::from_secs(5);
 const LOG_LIMIT: u32 = 1000;
+const MAX_WAIT: Duration = Duration::from_secs(30);
 
 pub struct BuildService {
     ctx: Arc<Context>,
@@ -83,8 +84,11 @@ impl Builds for BuildService {
     }
 
     async fn logs(&self, input: JobLogs) -> Result<JobLogsOutput> {
-        let limit = input.limit.unwrap_or(LOG_LIMIT) as usize;
-        self.ctx.table.logs(&input.job, input.after.unwrap_or(0), limit)
+        let (limit, after) = (input.limit.unwrap_or(LOG_LIMIT) as usize, input.after.unwrap_or(0));
+        match input.wait_ms.map(|ms| Duration::from_millis(ms).min(MAX_WAIT)) {
+            Some(wait) => self.ctx.table.wait_logs(&input.job, after, limit, wait).await,
+            None => self.ctx.table.logs(&input.job, after, limit),
+        }
     }
 
     async fn artifacts(&self, input: JobRef) -> Result<JobArtifactsOutput> {

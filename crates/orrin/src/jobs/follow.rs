@@ -35,7 +35,7 @@ pub async fn follow(api: &Api, job: &JobId) -> anyhow::Result<Outcome> {
 
 pub async fn print_backlog(api: &Api, job: &JobId, last: &mut u64) -> anyhow::Result<bool> {
     loop {
-        let page = api.send(JobLogs { job: job.clone(), after: Some(*last), limit: None }).await?;
+        let page = api.send(JobLogs { job: job.clone(), after: Some(*last), limit: None, wait_ms: None }).await?;
         let Some(end) = page.lines.last().map(|l| l.n) else { return Ok(page.done) };
         for line in &page.lines {
             print_line(api, line)?;

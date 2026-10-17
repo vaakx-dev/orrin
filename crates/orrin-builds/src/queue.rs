@@ -92,7 +92,7 @@ mod tests {
 
     #[tokio::test]
     async fn waits_for_free_slots() {
-        let queue = Queue::new(&BuildsConfig { cpu: Some(2), ram_mb: None, gpu: 1 });
+        let queue = Queue::new(&BuildsConfig { cpu: Some(2), gpu: 1, ..Default::default() });
         let gpu = Need { cpu: 1, ram_mb: 0, gpu: 1 };
         let first = queue.acquire(gpu).await;
         let second = tokio::time::timeout(Duration::from_millis(50), queue.acquire(gpu)).await;

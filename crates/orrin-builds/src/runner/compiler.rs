@@ -27,7 +27,7 @@ pub async fn wire(ctx: &Context, recipe: &Recipe, dir: &Path) -> Result<Wiring> 
         return Ok(Wiring { env: Vec::new(), note: Some(note) });
     };
     let cache = ctx.home.dir(&format!("caches/{name}"))?;
-    wired(launcher(Launch { tool, cache, dir: dir.to_path_buf(), warm: recipe.warm }))
+    wired(launcher(Launch { tool, cache, dir: dir.to_path_buf(), warm: recipe.warm.pool(1).is_some() }))
 }
 
 pub struct Launch {

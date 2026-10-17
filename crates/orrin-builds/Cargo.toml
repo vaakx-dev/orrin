@@ -9,7 +9,9 @@ license.workspace = true
 orrin-core.workspace = true
 async-trait.workspace = true
 base64.workspace = true
+futures-util.workspace = true
 globset.workspace = true
+reflink-copy.workspace = true
 rusqlite.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -22,9 +24,9 @@ walkdir.workspace = true
 windows = { workspace = true, features = [
     "Win32_Foundation",
     "Win32_Security",
+    "Win32_System_Console",
     "Win32_System_JobObjects",
     "Win32_System_Threading",
-    "Win32_System_Diagnostics_ToolHelp",
 ] }
 
 [dev-dependencies]

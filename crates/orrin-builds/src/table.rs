@@ -3,7 +3,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use orrin_core::api::{Event, JobLogsOutput};
-use orrin_core::model::{Artifact, Job, LogLine, Stream};
+use orrin_core::model::{Artifact, Job, JobState, LogLine, Stream};
 use orrin_core::{Error, Events, Hash, JobId, Result, now_ms};
 use tokio::sync::{Notify, watch};
 
@@ -119,6 +119,7 @@ impl Table {
         };
         self.journal.log(id, &line);
         self.events.emit(Event::JobLog { job: id.clone(), line });
+        self.changed.notify_waiters();
     }
 
     pub fn replay(&self, id: &JobId, lines: Vec<LogLine>) {
@@ -145,9 +146,31 @@ impl Table {
     }
 
     pub fn logs(&self, id: &JobId, after: u64, limit: usize) -> Result<JobLogsOutput> {
-        self.with(id, |entry| JobLogsOutput {
-            lines: entry.logs.iter().filter(|l| l.n > after).take(limit).cloned().collect(),
-            done: entry.job.state.is_done(),
+        Ok(self.page(id, after, limit)?.0)
+    }
+
+    pub async fn wait_logs(&self, id: &JobId, after: u64, limit: usize, wait: Duration) -> Result<JobLogsOutput> {
+        let deadline = tokio::time::Instant::now() + wait;
+        let (_, state) = self.page(id, after, 0)?;
+        loop {
+            let changed = self.changed.notified();
+            tokio::pin!(changed);
+            changed.as_mut().enable();
+            let (page, now) = self.page(id, after, limit)?;
+            if !page.lines.is_empty() || page.done || now != state {
+                return Ok(page);
+            }
+            if tokio::time::timeout_at(deadline, changed).await.is_err() {
+                return Ok(page);
+            }
+        }
+    }
+
+    fn page(&self, id: &JobId, after: u64, limit: usize) -> Result<(JobLogsOutput, JobState)> {
+        self.with(id, |entry| {
+            let start = entry.logs.partition_point(|l| l.n <= after);
+            let lines = entry.logs.range(start..).take(limit).cloned().collect();
+            (JobLogsOutput { lines, done: entry.job.state.is_done() }, entry.job.state)
         })
     }
 

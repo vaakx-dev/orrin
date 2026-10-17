@@ -1,7 +1,7 @@
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use orrin_core::api::{JobLogs, SyncJob, SyncLogs};
+use orrin_core::api::{JobLogs, JobLogsOutput, SyncJob, SyncLogs};
 use orrin_core::model::{Job, JobResult, JobState, Stream};
 use orrin_core::service::call_peer;
 use orrin_core::{Hash, JobId, PcId, Result, now_ms};
@@ -10,7 +10,9 @@ use tokio::sync::watch;
 use crate::context::Context;
 use crate::plan::Plan;
 
-const POLL: Duration = Duration::from_secs(1);
+const RETRY: Duration = Duration::from_secs(1);
+const MIRROR_EVERY: Duration = Duration::from_secs(1);
+const WAIT_MS: u64 = 25_000;
 const MAX_FAILURES: u32 = 5;
 const PAGE: u32 = 1000;
 const OWN_LINES: u64 = 1;
@@ -67,6 +69,7 @@ struct Follow {
 struct Cursor {
     after: u64,
     live: bool,
+    mirrored: Instant,
 }
 
 impl Follow {
@@ -77,50 +80,66 @@ impl Follow {
         self.ctx.hub.peers.push(&self.pc, hashes).await?;
         let remote: Job = call_peer(&*self.ctx.hub.peers, &self.pc, self.request.clone()).await?;
         self.ctx.table.journal().remote(&self.id, &remote.id);
+        if !remote.state.is_done() {
+            self.mirror(&remote, None);
+        }
         Ok(remote.id)
     }
 
     async fn track(&self, remote: JobId, seen: u64, mut cancel: watch::Receiver<bool>) -> Result<()> {
-        let mut cursor = Cursor { after: seen, live: false };
-        let (mut failures, mut cancelling, mut cancel_sent) = (0, false, false);
+        let mut cursor = Cursor { after: seen, live: false, mirrored: Instant::now() };
+        let (mut failures, mut cancel_sent) = (0, false);
         loop {
-            let poll = SyncJob { job: Some(remote.clone()), cancel: cancelling, ..self.request.clone() };
-            match call_peer(&*self.ctx.hub.peers, &self.pc, poll).await {
-                Ok(job) => {
-                    failures = 0;
-                    cancel_sent |= cancelling;
-                    self.stream(&remote, &mut cursor).await;
-                    if job.state.is_done() {
-                        return self.done(job, &cursor).await;
-                    }
-                    self.mirror(&job, None);
+            let page = tokio::select! {
+                page = self.page(&remote, cursor.after) => page,
+                _ = cancelled(&mut cancel), if !cancel_sent => {
+                    cancel_sent = true;
+                    let _ = self.status(&remote, true).await;
+                    continue;
                 }
+            };
+            let page = match page {
+                Ok(page) => page,
                 Err(err) => {
                     failures += 1;
                     if failures >= MAX_FAILURES {
                         return Err(err);
                     }
-                    tokio::time::sleep(POLL).await;
+                    tokio::time::sleep(RETRY).await;
+                    continue;
                 }
-            }
-            cancelling = pause(&mut cancel, cancel_sent).await;
-        }
-    }
-
-    async fn stream(&self, remote: &JobId, cursor: &mut Cursor) {
-        loop {
-            let ask = SyncLogs(JobLogs { job: remote.clone(), after: Some(cursor.after), limit: Some(PAGE) });
-            let Ok(page) = call_peer(&*self.ctx.hub.peers, &self.pc, ask).await else { return };
+            };
+            failures = 0;
             cursor.live = true;
+            let quiet = page.lines.is_empty();
             let full = page.lines.len() >= PAGE as usize;
             for line in page.lines {
                 cursor.after = line.n;
                 self.ctx.table.log(&self.id, line.stream, line.text);
             }
-            if !full {
-                return;
+            if page.done && !full {
+                let job = self.status(&remote, false).await?;
+                return self.done(job, &cursor).await;
+            }
+            if quiet || cursor.mirrored.elapsed() >= MIRROR_EVERY {
+                cursor.mirrored = Instant::now();
+                if let Ok(job) = self.status(&remote, false).await
+                    && !job.state.is_done()
+                {
+                    self.mirror(&job, None);
+                }
             }
         }
+    }
+
+    async fn page(&self, remote: &JobId, after: u64) -> Result<JobLogsOutput> {
+        let ask = JobLogs { job: remote.clone(), after: Some(after), limit: Some(PAGE), wait_ms: Some(WAIT_MS) };
+        call_peer(&*self.ctx.hub.peers, &self.pc, SyncLogs(ask)).await
+    }
+
+    async fn status(&self, remote: &JobId, cancel: bool) -> Result<Job> {
+        let ask = SyncJob { job: Some(remote.clone()), cancel, ..self.request.clone() };
+        call_peer(&*self.ctx.hub.peers, &self.pc, ask).await
     }
 
     async fn done(&self, remote: Job, cursor: &Cursor) -> Result<()> {
@@ -166,13 +185,6 @@ impl Follow {
     }
 }
 
-async fn pause(cancel: &mut watch::Receiver<bool>, cancel_sent: bool) -> bool {
-    if cancel_sent {
-        tokio::time::sleep(POLL).await;
-        return false;
-    }
-    tokio::select! {
-        _ = tokio::time::sleep(POLL) => false,
-        _ = cancel.wait_for(|c| *c) => true,
-    }
+async fn cancelled(cancel: &mut watch::Receiver<bool>) {
+    let _ = cancel.wait_for(|c| *c).await;
 }

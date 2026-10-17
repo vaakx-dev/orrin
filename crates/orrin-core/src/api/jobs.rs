@@ -62,6 +62,8 @@ pub struct JobLogs {
     pub after: Option<u64>,
     #[serde(default)]
     pub limit: Option<u32>,
+    #[serde(default)]
+    pub wait_ms: Option<u64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

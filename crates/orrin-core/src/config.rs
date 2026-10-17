@@ -36,11 +36,12 @@ pub struct BuildsConfig {
     pub cpu: Option<u32>,
     pub ram_mb: Option<u64>,
     pub gpu: u32,
+    pub warm_pool: u32,
 }
 
 impl Default for BuildsConfig {
     fn default() -> Self {
-        Self { cpu: None, ram_mb: None, gpu: 1 }
+        Self { cpu: None, ram_mb: None, gpu: 1, warm_pool: 3 }
     }
 }
 

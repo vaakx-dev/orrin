@@ -3,21 +3,22 @@ use std::ffi::c_void;
 use orrin_core::{Error, Result};
 use tokio::process::{Child, Command};
 use windows::Win32::Foundation::{CloseHandle, HANDLE};
-use windows::Win32::System::Diagnostics::ToolHelp::{
-    CreateToolhelp32Snapshot, TH32CS_SNAPTHREAD, THREADENTRY32, Thread32First, Thread32Next,
-};
+use windows::Win32::System::Console::GetConsoleWindow;
 use windows::Win32::System::JobObjects::{
     AssignProcessToJobObject, CreateJobObjectW, JOB_OBJECT_CPU_RATE_CONTROL_ENABLE,
     JOB_OBJECT_CPU_RATE_CONTROL_HARD_CAP, JOB_OBJECT_LIMIT_JOB_MEMORY, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
     JOBOBJECT_CPU_RATE_CONTROL_INFORMATION, JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JobObjectCpuRateControlInformation,
     JobObjectExtendedLimitInformation, SetInformationJobObject, TerminateJobObject,
 };
-use windows::Win32::System::Threading::{
-    CREATE_NO_WINDOW, CREATE_SUSPENDED, OpenThread, ResumeThread, THREAD_SUSPEND_RESUME,
-};
+use windows::Win32::System::Threading::{CREATE_NO_WINDOW, CREATE_SUSPENDED, PROCESS_CREATION_FLAGS};
 use windows::core::PCWSTR;
 
 use super::Limits;
+
+#[link(name = "ntdll", kind = "raw-dylib")]
+unsafe extern "system" {
+    fn NtResumeProcess(process: HANDLE) -> i32;
+}
 
 pub struct Tree(HANDLE);
 
@@ -27,12 +28,11 @@ unsafe impl Sync for Tree {}
 impl Tree {
     pub fn spawn(command: &mut Command, limits: Limits) -> Result<(Child, Tree)> {
         let tree = Tree::create(limits)?;
-        command.creation_flags((CREATE_SUSPENDED | CREATE_NO_WINDOW).0);
+        command.creation_flags((CREATE_SUSPENDED | own_console()).0);
         let mut child = command.spawn()?;
-        let attached = child.raw_handle().map(|h| unsafe { AssignProcessToJobObject(tree.0, HANDLE(h)) });
-        let started = match (attached, child.id()) {
-            (Some(Ok(())), Some(pid)) => resume(pid),
-            _ => Err(Error::internal("could not put the job's process in a job object")),
+        let started = match child.raw_handle().map(HANDLE) {
+            Some(process) => tree.adopt(process),
+            None => Err(Error::internal("the job's process has no handle")),
         };
         if let Err(err) = started {
             let _ = child.start_kill();
@@ -44,6 +44,15 @@ impl Tree {
     pub fn kill(&self) {
         unsafe {
             let _ = TerminateJobObject(self.0, 1);
+        }
+    }
+
+    fn adopt(&self, process: HANDLE) -> Result<()> {
+        unsafe { AssignProcessToJobObject(self.0, process) }
+            .map_err(|_| Error::internal("could not put the job's process in a job object"))?;
+        match unsafe { NtResumeProcess(process) } {
+            0 => Ok(()),
+            status => Err(Error::internal(format!("could not resume the job's process ({status:#x})"))),
         }
     }
 
@@ -81,29 +90,10 @@ impl Drop for Tree {
     }
 }
 
-fn resume(pid: u32) -> Result<()> {
-    let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0) }.map_err(win)?;
-    let mut entry = THREADENTRY32 { dwSize: std::mem::size_of::<THREADENTRY32>() as u32, ..Default::default() };
-    let mut found = unsafe { Thread32First(snapshot, &mut entry) }.is_ok();
-    let mut resumed = false;
-    while found {
-        if entry.th32OwnerProcessID == pid
-            && let Ok(thread) = unsafe { OpenThread(THREAD_SUSPEND_RESUME, false, entry.th32ThreadID) }
-        {
-            unsafe {
-                ResumeThread(thread);
-                let _ = CloseHandle(thread);
-            }
-            resumed = true;
-        }
-        found = unsafe { Thread32Next(snapshot, &mut entry) }.is_ok();
-    }
-    unsafe {
-        let _ = CloseHandle(snapshot);
-    }
-    match resumed {
-        true => Ok(()),
-        false => Err(Error::internal(format!("could not resume process {pid}"))),
+fn own_console() -> PROCESS_CREATION_FLAGS {
+    match unsafe { GetConsoleWindow() }.is_invalid() {
+        true => CREATE_NO_WINDOW,
+        false => PROCESS_CREATION_FLAGS(0),
     }
 }
 
