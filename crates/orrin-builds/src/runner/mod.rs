@@ -4,6 +4,7 @@ mod folder;
 mod outputs;
 mod placeholders;
 mod publish;
+pub mod steps;
 pub mod warm;
 mod workspace;
 
@@ -113,7 +114,7 @@ impl Run {
     async fn ready(&self, cancel: &mut watch::Receiver<bool>) -> Option<Result<(after::Outputs, Slot)>> {
         let target = &self.plan.target;
         let need = Need {
-            cpu: target.cpu.unwrap_or(1),
+            cpu: self.plan.cpu(self.ctx.queue.cores()),
             ram_mb: target.ram_mb.unwrap_or(0),
             gpu: self.plan.needs_gpu() as u32,
         };
@@ -155,19 +156,42 @@ impl Run {
         files: Arc<Snapshot>,
         cancel: watch::Receiver<bool>,
     ) -> Result<(Exit, Vec<Artifact>)> {
-        let spec = self.spec(dir).await?;
-        self.ctx.table.log(&self.id, Stream::System, format!("$ {}", spec.command));
-        let exit = process::run(spec, cancel, |stream, text| self.ctx.table.log(&self.id, stream, text)).await?;
-        if exit != Exit::Code(Some(0)) {
-            return Ok((exit, Vec::new()));
+        let env = self.env(dir).await?;
+        let mut target = self.plan.target.clone();
+        if !target.steps.is_empty() {
+            let built = steps::build(steps::Build {
+                ctx: &self.ctx,
+                plan: &self.plan,
+                tools: &self.tools,
+                id: &self.id,
+                dir,
+                files: &files,
+                env: &env,
+                parallel: self.plan.cpu(self.ctx.queue.cores()),
+                cancel: cancel.clone(),
+            })
+            .await?;
+            if built.exit != Exit::Code(Some(0)) {
+                return Ok((built.exit, Vec::new()));
+            }
+            if target.outputs.is_empty() {
+                target.outputs = built.outputs.iter().map(|path| globset::escape(path)).collect();
+            }
         }
-        let (store, plan, folder) = (self.ctx.hub.store.clone(), self.plan.clone(), dir.to_path_buf());
-        let artifacts = blocking(move || outputs::collect(&*store, &folder, &plan.target, &files)).await?;
-        Ok((exit, artifacts))
+        if !target.command.is_empty() {
+            let spec = self.spec(dir, env);
+            self.ctx.table.log(&self.id, Stream::System, format!("$ {}", spec.command));
+            let exit = process::run(spec, cancel, |stream, text| self.ctx.table.log(&self.id, stream, text)).await?;
+            if exit != Exit::Code(Some(0)) {
+                return Ok((exit, Vec::new()));
+            }
+        }
+        let (store, folder) = (self.ctx.hub.store.clone(), dir.to_path_buf());
+        let artifacts = blocking(move || outputs::collect(&*store, &folder, &target, &files)).await?;
+        Ok((Exit::Code(Some(0)), artifacts))
     }
 
-    async fn spec(&self, dir: &Path) -> Result<Spec> {
-        let target = &self.plan.target;
+    async fn env(&self, dir: &Path) -> Result<compiler::Env> {
         let screenshots = dir.join(folder::SCREENSHOTS);
         let mut env = vec![
             ("ORRIN_JOB".to_string(), self.id.as_str().into()),
@@ -177,11 +201,17 @@ impl Run {
         if let Some(path) = tools::search_path(&self.tools) {
             env.push(("PATH".to_string(), path));
         }
-        let wiring = compiler::wire(&self.ctx, target, dir).await?;
+        let wiring = compiler::wire(&self.ctx, &self.plan.target, dir).await?;
         if let Some(note) = wiring.note {
             self.ctx.table.log(&self.id, Stream::System, note);
         }
         env.extend(wiring.env);
+        Ok(env)
+    }
+
+    fn spec(&self, dir: &Path, env: compiler::Env) -> Spec {
+        let target = &self.plan.target;
+        let screenshots = dir.join(folder::SCREENSHOTS);
         let values = Values {
             dir,
             screenshots: &screenshots,
@@ -193,13 +223,13 @@ impl Run {
         let cores = self.ctx.queue.cores();
         let limits =
             Limits { cpu_percent: target.cpu.map(|c| c.saturating_mul(100) / cores), memory_mb: target.ram_mb };
-        Ok(Spec {
+        Spec {
             command: expanded.command,
             args: if expanded.took_args { Vec::new() } else { self.plan.args.clone() },
             dir: dir.to_path_buf(),
             env,
             limits,
-        })
+        }
     }
 
     async fn finish(&self, outcome: Result<(Exit, Vec<Artifact>)>) {

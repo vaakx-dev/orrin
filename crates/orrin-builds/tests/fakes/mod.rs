@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -55,7 +57,7 @@ impl Store for FakeStore {
     }
 }
 
-pub struct FakeProjects(Project);
+pub struct FakeProjects(Mutex<Project>);
 
 impl Service for FakeProjects {}
 
@@ -66,7 +68,7 @@ impl Projects for FakeProjects {
     async fn create(&self, _: ProjectsCreate) -> Result<ProjectOpened> { unimplemented!() }
     async fn settings(&self, _: ProjectsSettings) -> Result<ProjectSettings> { unimplemented!() }
     async fn log(&self, _: Log) -> Result<LogOutput> { unimplemented!() }
-    async fn get(&self, _: &ProjectId) -> Result<Project> { Ok(self.0.clone()) }
+    async fn get(&self, _: &ProjectId) -> Result<Project> { Ok(self.0.lock().unwrap().clone()) }
     async fn save(&self, _: Project) -> Result<()> { unimplemented!() }
     async fn swap_main(&self, _: Change) -> Result<Project> { unimplemented!() }
     async fn append(&self, _: Vec<Change>) -> Result<()> { unimplemented!() }
@@ -97,8 +99,22 @@ pub struct World {
     pub home: Home,
     pub builds: Arc<dyn Builds>,
     pub store: Arc<FakeStore>,
+    pub projects: Arc<FakeProjects>,
     pub project: ProjectId,
     pub setup: Setup,
+}
+
+fn snapshot(store: &FakeStore, files: &[(&str, &str)]) -> Hash {
+    let entries = files
+        .iter()
+        .map(|(path, body)| Entry {
+            path: path.to_string(),
+            hash: store.put(body.as_bytes()).unwrap(),
+            size: body.len() as u64,
+            mode: Default::default(),
+        })
+        .collect();
+    store.put_snapshot(&Snapshot::new(entries)).unwrap()
 }
 
 pub fn world(files: &[(&str, &str)]) -> World {
@@ -109,16 +125,7 @@ pub fn world(files: &[(&str, &str)]) -> World {
         Setup { home: home.clone(), config: Config::default(), me: me.clone(), events: Events::new(), hub: Hub::new() };
     let builds = orrin_builds::open(&setup).unwrap();
     let store = Arc::new(FakeStore::default());
-    let entries = files
-        .iter()
-        .map(|(path, body)| Entry {
-            path: path.to_string(),
-            hash: store.put(body.as_bytes()).unwrap(),
-            size: body.len() as u64,
-            mode: Default::default(),
-        })
-        .collect();
-    let main = store.put_snapshot(&Snapshot::new(entries)).unwrap();
+    let main = snapshot(&store, files);
     let project = Project {
         id: ProjectId::new(),
         name: "demo".into(),
@@ -127,27 +134,34 @@ pub fn world(files: &[(&str, &str)]) -> World {
         settings: Default::default(),
         created_at: 0,
     };
+    let id = project.id.clone();
+    let projects = Arc::new(FakeProjects(Mutex::new(project)));
     setup.hub.set(Services {
         home: home.clone(),
         config: setup.config.clone(),
         me,
         events: setup.events.clone(),
         store: store.clone(),
-        projects: Arc::new(FakeProjects(project.clone())),
+        projects: projects.clone(),
         views: Arc::new(Unavailable("views")),
         landing: Arc::new(Unavailable("landing")),
         mergers: Vec::new(),
         index: Arc::new(Unavailable("index")),
         facts: Arc::new(FakeFacts::default()),
         builds: builds.clone(),
+        cache: Arc::new(Unavailable("cache")),
         peers: Arc::new(Unavailable("peers")),
         git: Arc::new(Unavailable("git")),
     });
     builds.start().unwrap();
-    World { _dir: dir, home, builds, store, project: project.id, setup }
+    World { _dir: dir, home, builds, store, projects, project: id, setup }
 }
 
 impl World {
+    pub fn change(&self, files: &[(&str, &str)]) {
+        self.projects.0.lock().unwrap().main = snapshot(&self.store, files);
+    }
+
     pub fn restart(&self) -> Arc<dyn Builds> {
         let builds = orrin_builds::open(&self.setup).unwrap();
         builds.start().unwrap();

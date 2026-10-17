@@ -1,11 +1,13 @@
 mod api;
 pub mod auth;
+mod cache;
 mod events;
 
 use std::sync::Arc;
 
 use axum::Router;
-use axum::routing::{get, post};
+use axum::extract::DefaultBodyLimit;
+use axum::routing::{any, get, post};
 use orrin_core::service::Hub;
 
 use crate::registry::Registry;
@@ -22,5 +24,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api", get(api::list))
         .route("/api/{name}", post(api::call))
         .route("/events", get(events::subscribe))
+        .route("/cache/", any(cache::serve))
+        .route("/cache/{*path}", any(cache::serve).layer(DefaultBodyLimit::disable()))
         .with_state(state)
 }

@@ -46,6 +46,7 @@ impl Node {
             index: missing.clone(),
             facts: missing.clone(),
             builds: missing.clone(),
+            cache: missing.clone(),
             peers: orrin_sync::open(&setup).unwrap(),
             git: missing,
         });

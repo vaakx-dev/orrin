@@ -48,7 +48,7 @@ fn reply(result: Result<Value>) -> Response {
     }
 }
 
-fn status(code: ErrorCode) -> StatusCode {
+pub fn status(code: ErrorCode) -> StatusCode {
     match code {
         ErrorCode::NotFound => StatusCode::NOT_FOUND,
         ErrorCode::Conflict => StatusCode::CONFLICT,

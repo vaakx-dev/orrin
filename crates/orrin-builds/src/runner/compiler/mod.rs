@@ -1,3 +1,5 @@
+mod orrin;
+
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
@@ -14,23 +16,30 @@ pub struct Wiring {
     pub note: Option<String>,
 }
 
+const SCCACHE: &str = "sccache";
+
 pub async fn wire(ctx: &Context, target: &Target, dir: &Path) -> Result<Wiring> {
-    let wired = |env| Ok(Wiring { env, note: None });
-    let (name, launcher): (&str, fn(Launch) -> Env) = match target.cache {
-        CompilerCache::None => return wired(Vec::new()),
-        CompilerCache::Orrin | CompilerCache::Sccache => ("sccache", sccache),
+    let unwired = |note| Ok(Wiring { env: Vec::new(), note: Some(note) });
+    if target.cache == CompilerCache::None {
+        return Ok(Wiring { env: Vec::new(), note: None });
+    }
+    let Some(tool) = tools::find(&ctx.hub, SCCACHE).await else {
+        return unwired(format!("{SCCACHE} is not installed on this PC; building without a compiler cache"));
     };
-    let Some(tool) = tools::find(&ctx.hub, name).await else {
-        let note = format!("{name} is not installed on this PC; building without a compiler cache");
-        return Ok(Wiring { env: Vec::new(), note: Some(note) });
+    let backend = match target.cache {
+        CompilerCache::Orrin => match orrin::backend(&ctx.home, &tool).await {
+            Ok(env) => env,
+            Err(err) => return unwired(format!("the Orrin compiler cache is unreachable ({err}); not caching")),
+        },
+        _ => vec![var("SCCACHE_DIR", ctx.home.dir(&format!("caches/{SCCACHE}"))?)],
     };
-    let cache = ctx.home.dir(&format!("caches/{name}"))?;
-    wired(launcher(Launch { tool, cache, dir: dir.to_path_buf(), warm: target.warm.pool(1).is_some() }))
+    let env = sccache(Launch { tool, backend, dir: dir.to_path_buf(), warm: target.warm.pool(1).is_some() });
+    Ok(Wiring { env, note: None })
 }
 
 pub struct Launch {
     pub tool: PathBuf,
-    pub cache: PathBuf,
+    pub backend: Env,
     pub dir: PathBuf,
     pub warm: bool,
 }
@@ -38,7 +47,7 @@ pub struct Launch {
 fn sccache(launch: Launch) -> Env {
     let mut env = launchers(&launch.tool);
     env.push(var("RUSTC_WRAPPER", &launch.tool));
-    env.push(var("SCCACHE_DIR", &launch.cache));
+    env.extend(launch.backend);
     env.push(var("SCCACHE_BASEDIRS", &launch.dir));
     if !launch.warm {
         env.push(var("CARGO_INCREMENTAL", "0"));
@@ -59,18 +68,19 @@ fn var(name: &str, value: impl AsRef<std::ffi::OsStr>) -> (String, OsString) {
 }
 
 #[cfg(test)]
+fn get<'a>(env: &'a Env, name: &str) -> Option<&'a OsString> {
+    env.iter().find(|(n, _)| n == name).map(|(_, v)| v)
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
-
-    fn get<'a>(env: &'a Env, name: &str) -> Option<&'a OsString> {
-        env.iter().find(|(n, _)| n == name).map(|(_, v)| v)
-    }
 
     #[test]
     fn sccache_wraps_rustc_and_shares_the_pc_cache() {
         let launch = |warm| Launch {
             tool: PathBuf::from("/bin/sccache"),
-            cache: PathBuf::from("/home/caches/sccache"),
+            backend: vec![var("SCCACHE_DIR", "/home/caches/sccache")],
             dir: PathBuf::from("/home/runs/job"),
             warm,
         };

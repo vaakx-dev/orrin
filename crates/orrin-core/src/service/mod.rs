@@ -1,4 +1,5 @@
 mod builds;
+mod cache;
 mod facts;
 mod git;
 mod hub;
@@ -12,6 +13,7 @@ mod unavailable;
 mod views;
 
 pub use builds::Builds;
+pub use cache::Cache;
 pub use facts::Facts;
 pub use git::Git;
 pub use hub::{Hub, Services, Setup};

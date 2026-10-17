@@ -16,6 +16,19 @@ pub struct Config {
     pub views: ViewsConfig,
     pub builds: BuildsConfig,
     pub maintenance: MaintenanceConfig,
+    pub cache: CacheConfig,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct CacheConfig {
+    pub keep_days: u32,
+}
+
+impl Default for CacheConfig {
+    fn default() -> Self {
+        Self { keep_days: 30 }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

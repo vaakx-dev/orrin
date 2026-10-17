@@ -17,6 +17,7 @@ pub fn wire(home: Home, config: Config) -> Result<Hub> {
         index: orrin_index::open(&setup)?,
         facts: orrin_facts::open(&setup)?,
         builds: orrin_builds::open(&setup)?,
+        cache: orrin_cache::open(&setup)?,
         peers: orrin_sync::open(&setup)?,
         git: orrin_git::open(&setup)?,
     };
@@ -34,6 +35,7 @@ fn start(hub: &Hub) -> Result<()> {
     hub.index.start()?;
     hub.facts.start()?;
     hub.builds.start()?;
+    hub.cache.start()?;
     hub.peers.start()?;
     hub.git.start()
 }

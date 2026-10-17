@@ -15,6 +15,7 @@ orrin-merge.workspace = true
 orrin-index.workspace = true
 orrin-facts.workspace = true
 orrin-builds.workspace = true
+orrin-cache.workspace = true
 orrin-sync.workspace = true
 orrin-git.workspace = true
 axum.workspace = true

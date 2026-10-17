@@ -17,4 +17,5 @@ One Rust program that owns the user's projects: files, views, landing, builds an
 - `orrin-server` wires services in `wiring.rs` and maps every request to one trait method in `routes.rs`.
 - Errors use `orrin_core::Error` codes: `not_found`, `conflict`, `invalid`, `unavailable`, `unauthorized`, `internal`.
 - Emit events through `hub.events.emit(Event::...)`.
+- `cache = "orrin"` runs compilers through sccache with its WebDAV backend pointed at the local server (`/cache/`, local key as bearer token); `orrin-cache` keeps the entries in the store and asks peers on a miss.
 - Never use port 4520 or `~/.orrin` in tests; use `--home <temp dir>` and port 0, and bind `127.0.0.1` there.

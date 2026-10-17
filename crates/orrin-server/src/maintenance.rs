@@ -37,6 +37,9 @@ pub async fn run(hub: &Hub) -> Result<Event> {
     }
     roots.extend(views(hub).await?);
     roots.extend(hub.builds.roots().await?);
+    let dropped = hub.cache.trim().await?;
+    tracing::info!(dropped, "compiler cache trimmed");
+    roots.extend(hub.cache.roots().await?);
     let store = hub.store.clone();
     let report = tokio::task::spawn_blocking(move || store.gc(&roots))
         .await

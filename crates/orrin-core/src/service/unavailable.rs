@@ -8,7 +8,7 @@ use crate::clock::Clock;
 use crate::error::{Error, Result};
 use crate::id::{ChangeId, Hash, PcId, ProjectId, SnapshotId, ViewId};
 use crate::model::{Change, Job, JobKind, Linked, Pc, PcSettings, Project, ProjectSettings, Tool, View};
-use crate::service::{Builds, Edits, Facts, GcReport, Git, Index, Landing, Materialise, Peers, Projects, Service, Store, Views};
+use crate::service::{Builds, Cache, Edits, Facts, GcReport, Git, Index, Landing, Materialise, Peers, Projects, Service, Store, Views};
 
 #[derive(Clone, Copy, Debug)]
 pub struct Unavailable(pub &'static str);
@@ -107,6 +107,15 @@ impl Builds for Unavailable {
     async fn list(&self, _: JobList) -> Result<JobListOutput> { self.err() }
     async fn roots(&self) -> Result<Vec<Hash>> { Ok(Vec::new()) }
     async fn linked(&self, _: &ProjectId) -> Result<Vec<Linked>> { Ok(Vec::new()) }
+}
+
+#[async_trait]
+impl Cache for Unavailable {
+    async fn get(&self, _: &str) -> Result<Option<Vec<u8>>> { Ok(None) }
+    async fn put(&self, _: &str, _: Vec<u8>) -> Result<()> { self.err() }
+    async fn find(&self, _: SyncCache) -> Result<CacheEntry> { Ok(CacheEntry::default()) }
+    async fn trim(&self) -> Result<u64> { Ok(0) }
+    async fn roots(&self) -> Result<Vec<Hash>> { Ok(Vec::new()) }
 }
 
 #[async_trait]

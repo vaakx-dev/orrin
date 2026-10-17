@@ -1,3 +1,4 @@
+mod cache;
 mod events;
 mod facts;
 mod files;
@@ -12,6 +13,7 @@ mod request;
 mod sync;
 mod views;
 
+pub use cache::*;
 pub use events::*;
 pub use facts::*;
 pub use files::*;
@@ -82,6 +84,7 @@ requests! {
     SyncJob => "sync.job": Job,
     SyncLogs => "sync.logs": JobLogsOutput,
     SyncFacts => "sync.facts": FactsOutput,
+    SyncCache => "sync.cache": CacheEntry,
 }
 
 pub fn is_peer_request(name: &str) -> bool {

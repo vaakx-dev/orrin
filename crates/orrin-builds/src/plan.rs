@@ -63,6 +63,10 @@ impl Plan {
         self.kind != JobKind::Run
     }
 
+    pub fn cpu(&self, cores: u32) -> u32 {
+        self.target.cpu.unwrap_or(if self.target.steps.is_empty() { 1 } else { cores })
+    }
+
     pub fn needs_gpu(&self) -> bool {
         self.target.gpu || self.target.needs.iter().any(|n| n == "gpu")
     }

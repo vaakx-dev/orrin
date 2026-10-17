@@ -57,6 +57,28 @@ async fn objects_get_returns_whole_big_files() {
 }
 
 #[tokio::test]
+async fn serves_compiler_cache_entries_over_webdav() {
+    let daemon = Daemon::start().await;
+    let http = reqwest::Client::new();
+    let token = format!("Bearer {}", daemon.home.local_key().unwrap());
+    let url = daemon.url("/cache/a/b/c/abc123");
+    let send = |method: &str, url: &str| {
+        http.request(reqwest::Method::from_bytes(method.as_bytes()).unwrap(), url).header("authorization", &token)
+    };
+
+    assert_eq!(http.get(&url).send().await.unwrap().status(), 401);
+    assert_eq!(send("GET", &url).send().await.unwrap().status(), 404);
+    assert_eq!(send("PROPFIND", &daemon.url("/cache/a/b/c/")).send().await.unwrap().status(), 207);
+    assert_eq!(send("MKCOL", &daemon.url("/cache/a/")).send().await.unwrap().status(), 201);
+    let entry = vec![7u8; 3 << 20];
+    assert_eq!(send("PUT", &url).body(entry.clone()).send().await.unwrap().status(), 201);
+    let got = send("GET", &url).send().await.unwrap();
+    assert_eq!(got.status(), 200);
+    assert!(got.bytes().await.unwrap() == entry);
+    daemon.stop().await;
+}
+
+#[tokio::test]
 async fn local_callers_need_the_key() {
     let daemon = Daemon::start().await;
     let http = reqwest::Client::new();

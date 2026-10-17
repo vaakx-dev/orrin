@@ -290,6 +290,7 @@ impl World {
             index,
             facts: Arc::new(OneTool),
             builds: Arc::new(none),
+            cache: Arc::new(none),
             peers: Arc::new(none),
             git: Arc::new(none),
         });

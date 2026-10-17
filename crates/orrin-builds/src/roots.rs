@@ -3,6 +3,7 @@ use orrin_core::model::JobResult;
 use orrin_core::service::Store;
 
 use crate::context::Context;
+use crate::runner::steps::Records;
 
 pub fn collect(ctx: &Context) -> Vec<Hash> {
     let store = &*ctx.hub.store;
@@ -11,6 +12,7 @@ pub fn collect(ctx: &Context) -> Vec<Hash> {
     results.extend(jobs.iter().filter_map(|job| job.result.clone()));
     let mut roots: Vec<Hash> = jobs.into_iter().map(|job| job.snapshot).collect();
     roots.extend(ctx.links.roots());
+    roots.extend(Records::open(&ctx.home).map(|records| records.roots()).unwrap_or_default());
     for result in results {
         roots.extend(artifacts(store, &result));
         roots.push(result);

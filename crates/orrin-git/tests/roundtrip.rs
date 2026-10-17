@@ -70,6 +70,7 @@ fn world(home: &Path, remote: &Path) -> World {
         index: Arc::new(Unavailable("index")),
         facts: Arc::new(Unavailable("facts")),
         builds: Arc::new(Unavailable("builds")),
+        cache: Arc::new(Unavailable("cache")),
         peers: Arc::new(Unavailable("peers")),
         git: orrin_git::open(&setup).unwrap(),
     };
