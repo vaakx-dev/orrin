@@ -1,0 +1,24 @@
+[recipes.check]
+inputs = ["Cargo.toml", "Cargo.lock", "rustfmt.toml", "crates/**"]
+command = "cargo clippy --workspace --all-targets -- -D warnings"
+needs = ["cargo"]
+cpu = 12
+warm = true
+cache = "sccache"
+
+[recipes.test]
+inputs = ["Cargo.toml", "Cargo.lock", "crates/**"]
+command = "cargo test --workspace {args}"
+needs = ["cargo"]
+cpu = 12
+warm = true
+cache = "sccache"
+
+[recipes.release]
+inputs = ["Cargo.toml", "Cargo.lock", "crates/**"]
+command = "cargo build --release"
+outputs = ["target/release/orrin.exe"]
+needs = ["cargo"]
+cpu = 12
+warm = true
+cache = "sccache"
