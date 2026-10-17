@@ -8,6 +8,13 @@ use super::state::Overlay;
 use super::{Engine, ProjectIndex};
 
 impl Engine {
+    pub(super) async fn start_clean(&self, project: &ProjectId, view: &ViewId) -> Result<Clock> {
+        let clock = self.tick()?;
+        let index = self.index(project);
+        index.write().overlays.entry(view.clone()).or_insert_with(|| Overlay { clock, ..Overlay::default() });
+        Ok(clock)
+    }
+
     pub(super) async fn ensure_overlay(&self, project: &ProjectId, index: &ProjectIndex, view: &ViewId) -> Result<()> {
         while !index.has_overlay(view) {
             let generation = index.read().touches.get(view).copied().unwrap_or(0);

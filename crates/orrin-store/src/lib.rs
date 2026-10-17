@@ -7,6 +7,8 @@ mod object;
 mod read;
 mod seal;
 mod service;
+mod slices;
+mod snapshots;
 mod verified;
 mod write;
 mod zipped;

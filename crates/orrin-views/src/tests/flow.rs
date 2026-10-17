@@ -5,6 +5,7 @@ use orrin_core::model::{Change, FileStatus, SHARE_FROM, View, ViewState};
 use orrin_core::service::Projects;
 use orrin_core::{ChangeId, ProjectId, now_ms};
 
+use crate::inner::Inner;
 use crate::snapshots::with_edits;
 use crate::tests::fakes::Rig;
 
@@ -40,11 +41,13 @@ async fn import_respects_ignores() {
         ("orrin.toml", "ignore = [\"*.log\"]\n"),
         ("x.log", "x"),
         ("sub/b.txt", "b\n"),
+        ("sub/.gitignore", "*.tmp\n"),
+        ("sub/c.tmp", "x"),
     ];
     let opened = import(&rig, &files).await;
     let main = rig.hub.store.snapshot(&opened.project.main).unwrap();
     let paths: Vec<&str> = main.entries.iter().map(|e| e.path.as_str()).collect();
-    assert_eq!(paths, [".gitignore", "a.txt", "orrin.toml", "sub/b.txt"]);
+    assert_eq!(paths, [".gitignore", "a.txt", "orrin.toml", "sub/.gitignore", "sub/b.txt"]);
     let user = opened.view.unwrap();
     let changes = rig.views.changes(Changes { project: opened.project.id, view: user.id }).await.unwrap();
     assert!(changes.files.is_empty());
@@ -189,6 +192,36 @@ async fn landed_worker_view_is_kept_then_purged() {
     assert_eq!(rig.inner.purge().await.unwrap(), 1);
     assert!(!view.path.exists());
     assert!(rig.views.get(&view.id).await.is_err());
+}
+
+fn spare_id(rig: &Rig) -> String {
+    let views = std::fs::read_dir(rig.setup.home.views()).unwrap().flatten().map(|e| e.path());
+    let spares: Vec<String> = views
+        .filter(|p| p.extension().is_some_and(|e| e == "spare"))
+        .map(|p| p.file_stem().unwrap().to_string_lossy().into_owned())
+        .collect();
+    assert_eq!(spares.len(), 1);
+    spares[0].clone()
+}
+
+#[tokio::test]
+async fn spare_folder_becomes_the_next_view_and_survives_a_restart() {
+    let rig = Rig::new(1 << 20);
+    let opened = import(&rig, &[("a.txt", "a\n"), ("sub/b.txt", "b\n")]).await;
+    let project = opened.project.id.clone();
+    rig.inner.clone().refill(project.clone()).await.unwrap();
+    let spare = spare_id(&rig);
+    let view = worker(&rig, &project).await;
+    assert_eq!(view.id.as_str(), spare);
+    assert_eq!(std::fs::read_to_string(view.path.join("sub/b.txt")).unwrap(), "b\n");
+    assert!(rig.views.changes(Changes { project: project.clone(), view: view.id }).await.unwrap().files.is_empty());
+
+    rig.inner.clone().refill(project.clone()).await.unwrap();
+    let next = spare_id(&rig);
+    let restarted = Inner::new(&rig.setup).unwrap();
+    let folder = restarted.folder_at(&project, &opened.project.main).await.unwrap();
+    assert_eq!(folder.id.as_str(), next);
+    assert_eq!(std::fs::read_to_string(folder.root.join("a.txt")).unwrap(), "a\n");
 }
 
 #[tokio::test]

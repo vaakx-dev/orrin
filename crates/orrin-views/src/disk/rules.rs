@@ -3,10 +3,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use ignore::gitignore::{Gitignore, GitignoreBuilder};
-use ignore::{DirEntry, WalkBuilder};
 use orrin_core::model::{MANIFEST_PATH, Manifest};
 
 use crate::disk::files::is_temp;
+use crate::disk::walk;
 
 pub struct Found {
     pub rel: String,
@@ -51,48 +51,30 @@ impl Rules {
     }
 
     pub fn walk(&self) -> Vec<Found> {
-        let mut found = BTreeMap::new();
-        let main = self.walker(&self.root, true, |m, rel, is_dir| !m.ignores(rel, is_dir));
+        let m = &self.matchers;
+        let main = walk::files(&self.root, true, &|abs, is_dir, nested| {
+            self.kept(abs, |rel| !m.ignores(rel, is_dir)) && !nested.ignores(abs, is_dir)
+        });
         let included = self.include_bases.iter().flat_map(|base| {
-            self.walker(&self.root.join(base), false, |m, rel, is_dir| {
-                !m.extra.matched_path_or_any_parents(rel, is_dir).is_ignore()
-                    && (is_dir || m.include.matched_path_or_any_parents(rel, false).is_ignore())
+            walk::files(&self.root.join(base), false, &|abs, is_dir, _| {
+                self.kept(abs, |rel| {
+                    !m.extra.matched_path_or_any_parents(rel, is_dir).is_ignore()
+                        && (is_dir || m.include.matched_path_or_any_parents(rel, false).is_ignore())
+                })
             })
         });
-        for entry in main.chain(included) {
-            if let Some(file) = self.found(entry.path()) {
-                found.entry(file.rel.clone()).or_insert(file);
+        let mut found = BTreeMap::new();
+        for (abs, meta) in main.into_iter().chain(included) {
+            if let Some(rel) = rel_path(&self.root, &abs) {
+                found.entry(rel.clone()).or_insert(Found { rel, abs, meta });
             }
         }
         found.into_values().collect()
     }
 
-    fn walker<K>(&self, start: &Path, standard: bool, keep: K) -> impl Iterator<Item = DirEntry> + use<K>
-    where
-        K: Fn(&Matchers, &Path, bool) -> bool + Send + Sync + 'static,
-    {
-        let matchers = self.matchers.clone();
-        let root = self.root.clone();
-        WalkBuilder::new(start)
-            .standard_filters(standard)
-            .hidden(false)
-            .parents(false)
-            .git_global(false)
-            .git_exclude(false)
-            .require_git(false)
-            .filter_entry(move |entry| {
-                let rel = entry.path().strip_prefix(&root).unwrap_or(entry.path());
-                let is_dir = entry.file_type().is_some_and(|t| t.is_dir());
-                rel.as_os_str().is_empty() || (!is_temp_path(rel) && keep(&matchers, rel, is_dir))
-            })
-            .build()
-            .flatten()
-    }
-
-    fn found(&self, abs: &Path) -> Option<Found> {
-        let meta = std::fs::symlink_metadata(abs).ok().filter(|m| m.is_file())?;
-        let rel = rel_path(&self.root, abs)?;
-        Some(Found { rel, abs: abs.to_path_buf(), meta })
+    fn kept(&self, abs: &Path, keep: impl Fn(&Path) -> bool) -> bool {
+        let rel = abs.strip_prefix(&self.root).unwrap_or(abs);
+        !is_temp_path(rel) && keep(rel)
     }
 }
 

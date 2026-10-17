@@ -1,14 +1,17 @@
+use std::cmp::Reverse;
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use orrin_core::api::{ProjectOpened, ProjectsImport, ViewCreate};
 use orrin_core::model::{Entry, Project, Snapshot, View, ViewKind, ViewState};
-use orrin_core::par::par_map;
 use orrin_core::service::{Edits, Store};
 use orrin_core::{Error, ProjectId, Result, ViewId, now_ms};
+use rayon::prelude::*;
 
 use crate::disk::rules::Rules;
 use crate::disk::stats::Stats;
 use crate::inner::Inner;
+use crate::pools;
 use crate::slot::{Slot, ViewRecord};
 use crate::watch::watch;
 
@@ -20,7 +23,8 @@ impl Inner {
         self.ensure_free(&root).await?;
         let name = input.name.unwrap_or_else(|| folder_name(&root));
         let mut stats = Stats::default();
-        let snapshot = snapshot_folder(&*self.hub.store, &Rules::load(&root, &[]), &mut stats)?;
+        let rules = Rules::load(&root, &[]);
+        let snapshot = pools::files().install(|| snapshot_folder(&*self.hub.store, &rules, &mut stats))?;
         let main = self.hub.store.put_snapshot(&snapshot)?;
         let project = Project {
             id: ProjectId::new(),
@@ -31,57 +35,66 @@ impl Inner {
             created_at: now_ms(),
         };
         self.hub.projects.save(project.clone()).await?;
-        let view = self.open_view(user_view(&project, root), stats)?;
+        let view = self.open_view(user_view(&project, root), stats, true).await?;
         let paths: Vec<String> = snapshot.entries.into_iter().map(|e| e.path).collect();
-        if let Err(err) = self.hub.index.touched(&project.id, None, &paths).await {
-            tracing::warn!("index.touched failed for imported project {}: {err}", project.id);
-        }
-        Ok(ProjectOpened { project, view: Some(view), files: paths.len() as u64 })
+        let files = paths.len() as u64;
+        let (hub, id) = (self.hub.clone(), project.id.clone());
+        tokio::spawn(async move {
+            if let Err(err) = hub.index.touched(&id, None, &paths).await {
+                tracing::warn!("index.touched failed for imported project {id}: {err}");
+            }
+        });
+        Ok(ProjectOpened { project, view: Some(view), files })
     }
 
     pub async fn adopt(&self, project: &ProjectId, path: &Path) -> Result<View> {
         let project = self.hub.projects.get(project).await?;
         let root = folder(path)?;
         self.ensure_free(&root).await?;
-        self.open_view(user_view(&project, root), Stats::default())
+        self.open_view(user_view(&project, root), Stats::default(), false).await
     }
 
     pub async fn create(&self, input: ViewCreate) -> Result<View> {
         let project = self.hub.projects.get(&input.project).await?;
         let base = input.base.unwrap_or(project.main);
-        let snapshot = self.hub.store.snapshot(&base)?;
-        let id = ViewId::new();
-        let root = self.worker_root(&id);
-        let stats = self.materialise_all(&snapshot, &root).inspect_err(|_| {
-            let _ = std::fs::remove_dir_all(&root);
-        })?;
+        let folder = self.folder_at(&project.id, &base).await?;
         let view = View {
-            id,
+            id: folder.id,
             project: project.id,
             owner: input.owner,
             kind: ViewKind::Worker,
-            path: root,
+            path: folder.root,
             base,
             claims: input.claims,
             state: ViewState::Open,
             created_at: now_ms(),
             landed: None,
         };
-        self.open_view(view, stats)
+        self.open_view(view, folder.stats, true).await
     }
 
-    fn open_view(&self, view: View, stats: Stats) -> Result<View> {
+    async fn open_view(&self, view: View, stats: Stats, clean: bool) -> Result<View> {
         let record = ViewRecord { view: view.clone(), captured: Edits::new(), closed_at: None };
         self.save(&record)?;
         let slot = Slot::new(record, stats);
+        self.save_stats(&slot)?;
+        if clean && let Err(err) = self.hub.index.touched(&view.project, Some(&view.id), &[]).await {
+            tracing::warn!("index could not start view {}: {err}", view.id);
+        }
         watch(self, &slot);
         self.insert(slot);
         Ok(view)
     }
 
-    fn materialise_all(&self, snapshot: &Snapshot, root: &Path) -> Result<Stats> {
+    pub fn materialise_all(&self, snapshot: &Snapshot, root: &Path) -> Result<Stats> {
+        let dirs: BTreeSet<PathBuf> =
+            snapshot.entries.iter().filter_map(|e| root.join(&e.path).parent().map(Path::to_path_buf)).collect();
         std::fs::create_dir_all(root)?;
-        let written = par_map(&snapshot.entries, |entry| self.write_entry(ViewKind::Worker, root, entry));
+        for dir in &dirs {
+            std::fs::create_dir_all(dir)?;
+        }
+        let written: Vec<_> =
+            snapshot.entries.par_iter().map(|entry| self.put_entry(ViewKind::Worker, root, entry)).collect();
         let mut stats = Stats::default();
         for (entry, meta) in snapshot.entries.iter().zip(written) {
             stats.remember(&entry.path, &meta?, entry.hash.clone());
@@ -127,11 +140,14 @@ fn folder_name(root: &Path) -> String {
 }
 
 fn snapshot_folder(store: &dyn Store, rules: &Rules, stats: &mut Stats) -> Result<Snapshot> {
-    let entries = rules
-        .walk()
+    let mut found = rules.walk();
+    found.sort_by_key(|f| Reverse(f.meta.len()));
+    let hashes: Vec<Result<_>> = found.par_iter().map(|f| store.put_file(&f.abs)).collect();
+    let entries = found
         .into_iter()
-        .map(|found| {
-            let state = stats.remember_put(&found.rel, &found.abs, store)?;
+        .zip(hashes)
+        .map(|(found, hash)| {
+            let state = stats.remember(&found.rel, &found.meta, hash?);
             Ok(Entry { path: found.rel, hash: state.hash, size: state.size, mode: state.mode })
         })
         .collect::<Result<Vec<_>>>()?;

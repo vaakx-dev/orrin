@@ -38,7 +38,10 @@ impl DiskStore {
         }
         match holder {
             Some(holder) => self.point(&piece.hash, &holder.file, holder.offset, piece.len),
-            None => self.replace_object(&piece.hash, &self.raw_bytes(&piece.hash)?),
+            None => {
+                self.replace_object(&piece.hash, &self.raw_bytes(&piece.hash)?)?;
+                self.slices.remove(&piece.hash)
+            }
         }
     }
 

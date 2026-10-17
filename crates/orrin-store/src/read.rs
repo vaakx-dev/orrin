@@ -1,17 +1,21 @@
 use std::fs::{self, File};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 
-use orrin_core::{Error, Hash, Result};
+use orrin_core::{Error, ErrorCode, Hash, Result};
 
 use crate::disk::DiskStore;
 use crate::object::{MAGIC, Manifest, Object, decode};
+use crate::slices::Located;
 use crate::zipped;
 
 impl DiskStore {
     pub(crate) fn raw_bytes(&self, hash: &Hash) -> Result<Vec<u8>> {
-        let bytes = self.stored_bytes(hash)?;
-        let Some(Manifest::Slice { file, offset, len }) = slice_of(hash, &bytes) else {
-            return Ok(bytes);
+        let Located { file, offset, len } = match self.stored_bytes(hash) {
+            Ok(bytes) => match slice_of(hash, &bytes) {
+                Some(at) => at,
+                None => return Ok(bytes),
+            },
+            Err(err) => self.slices.get(hash).ok_or(err)?,
         };
         let bytes = self.slice(&file, offset, len)?;
         if Hash::of(&bytes) != *hash {
@@ -21,12 +25,20 @@ impl DiskStore {
     }
 
     pub(crate) fn load(&self, hash: &Hash) -> Result<Object> {
-        decode(hash, self.stored_bytes(hash)?)
+        match self.stored_bytes(hash) {
+            Ok(bytes) => decode(hash, bytes),
+            Err(err) => self.slices.get(hash).map(|at| Object::Composite(at.into())).ok_or(err),
+        }
     }
 
     pub(crate) fn manifest(&self, hash: &Hash) -> Result<Option<Manifest>> {
-        if !self.has_manifest_head(hash)? {
-            return Ok(None);
+        match self.has_manifest_head(hash) {
+            Ok(false) => return Ok(None),
+            Err(err) if err.code == ErrorCode::NotFound => {
+                return self.slices.get(hash).map(|at| Some(at.into())).ok_or(err);
+            }
+            Err(err) => return Err(err),
+            Ok(true) => {}
         }
         match self.load(hash)? {
             Object::Composite(manifest) => Ok(Some(manifest)),
@@ -86,9 +98,9 @@ impl DiskStore {
     }
 }
 
-fn slice_of(hash: &Hash, bytes: &[u8]) -> Option<Manifest> {
+fn slice_of(hash: &Hash, bytes: &[u8]) -> Option<Located> {
     let parsed = bytes.starts_with(MAGIC).then(|| Manifest::parse(bytes).ok()).flatten();
-    parsed.filter(|manifest| matches!(manifest, Manifest::Slice { .. }) && Hash::of(bytes) != *hash)
+    parsed.and_then(Located::of).filter(|_| Hash::of(bytes) != *hash)
 }
 
 fn not_found(hash: &Hash, err: io::Error) -> Error {

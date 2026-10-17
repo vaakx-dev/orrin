@@ -12,14 +12,14 @@ use crate::slot::Slot;
 
 impl Inner {
     pub fn place(&self, kind: ViewKind, root: &Path, entry: &Entry, stats: &mut Stats) -> Result<()> {
-        let meta = self.write_entry(kind, root, entry)?;
+        remove_if_present(&root.join(&entry.path))?;
+        let meta = self.put_entry(kind, root, entry)?;
         stats.remember(&entry.path, &meta, entry.hash.clone());
         Ok(())
     }
 
-    pub fn write_entry(&self, kind: ViewKind, root: &Path, entry: &Entry) -> Result<Metadata> {
+    pub fn put_entry(&self, kind: ViewKind, root: &Path, entry: &Entry) -> Result<Metadata> {
         let abs = root.join(&entry.path);
-        remove_if_present(&abs)?;
         let how = match kind {
             ViewKind::Worker if entry.shareable() => Materialise::Link,
             _ => Materialise::Copy,

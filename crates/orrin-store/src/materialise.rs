@@ -6,14 +6,11 @@ use orrin_core::id::fresh;
 use orrin_core::service::Materialise;
 use orrin_core::{Hash, Result};
 
-use crate::disk::DiskStore;
+use crate::disk::{DiskStore, in_dir};
 use crate::verified::Verified;
 
 impl DiskStore {
     pub(crate) fn materialise_at(&self, hash: &Hash, path: &Path, how: Materialise) -> Result<()> {
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)?;
-        }
         match how {
             Materialise::Copy => self.copy_to(hash, path, false),
             Materialise::ReadonlyCopy => self.copy_to(hash, path, true),
@@ -22,21 +19,29 @@ impl DiskStore {
     }
 
     pub(crate) fn copy_to(&self, hash: &Hash, path: &Path, readonly: bool) -> Result<()> {
-        let temp = sibling_temp(path);
-        self.write_file(hash, &temp, readonly)?;
-        replace(&temp, path)
+        match in_dir(path, || File::create_new(path)) {
+            Ok(file) => self.fill(hash, file, readonly).inspect_err(|_| {
+                let _ = fs::remove_file(path);
+            }),
+            Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
+                let temp = sibling_temp(path);
+                self.write_file(hash, &temp, readonly)?;
+                replace(&temp, path)
+            }
+            Err(err) => Err(err.into()),
+        }
     }
 
     pub(crate) fn write_file(&self, hash: &Hash, temp: &Path, readonly: bool) -> Result<()> {
-        let result = self.try_write_file(hash, temp, readonly);
+        let result = File::create(temp).map_err(Into::into).and_then(|file| self.fill(hash, file, readonly));
         if result.is_err() {
             let _ = fs::remove_file(temp);
         }
         result
     }
 
-    fn try_write_file(&self, hash: &Hash, temp: &Path, readonly: bool) -> Result<()> {
-        let mut out = Verified::new(BufWriter::new(File::create(temp)?));
+    fn fill(&self, hash: &Hash, file: File, readonly: bool) -> Result<()> {
+        let mut out = Verified::new(BufWriter::new(file));
         self.write_to(hash, &mut out)?;
         let file = out.finish(hash)?.into_inner().map_err(|err| err.into_error())?;
         if readonly {
@@ -49,7 +54,7 @@ impl DiskStore {
 }
 
 pub(crate) fn place(path: &Path, make: impl Fn(&Path) -> io::Result<()>) -> Result<()> {
-    match make(path) {
+    match in_dir(path, || make(path)) {
         Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
             let temp = sibling_temp(path);
             make(&temp)?;

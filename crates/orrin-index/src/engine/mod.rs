@@ -73,6 +73,11 @@ impl Engine {
     }
 
     pub async fn touched(&self, project: &ProjectId, view: Option<&ViewId>, paths: &[String]) -> Result<Clock> {
+        if let Some(view) = view
+            && paths.is_empty()
+        {
+            return self.start_clean(project, view).await;
+        }
         let before = self.index(project).read().clock;
         let index = self.sync_main(project).await?;
         let clock = match view {

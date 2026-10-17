@@ -28,6 +28,10 @@ pub fn remove_if_present(path: &Path) -> Result<()> {
     }
 }
 
+pub fn remove_any(path: &Path) {
+    let _ = if path.is_dir() { fs::remove_dir_all(path) } else { fs::remove_file(path) };
+}
+
 fn replace(tmp: &Path, path: &Path) -> Result<()> {
     remove_if_present(path)?;
     fs::rename(tmp, path)?;

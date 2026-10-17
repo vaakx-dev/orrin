@@ -1,9 +1,10 @@
 use orrin_core::api::{Event, LandOutput, ViewList};
 use orrin_core::model::{View, ViewKind, ViewState};
-use orrin_core::service::Services;
+use orrin_core::service::Hub;
 use orrin_core::{ProjectId, SnapshotId};
+use tokio::task::JoinSet;
 
-pub async fn settle(hub: &Services, project: &ProjectId, landed: Option<&View>, mut out: LandOutput) -> LandOutput {
+pub async fn settle(hub: &Hub, project: &ProjectId, landed: Option<&View>, mut out: LandOutput) -> LandOutput {
     if let Some(view) = landed
         && !out.conflicts.is_empty()
     {
@@ -22,7 +23,7 @@ pub async fn settle(hub: &Services, project: &ProjectId, landed: Option<&View>, 
     out
 }
 
-async fn advance(hub: &Services, project: &ProjectId, landed: Option<&View>, main: &SnapshotId) -> Vec<String> {
+async fn advance(hub: &Hub, project: &ProjectId, landed: Option<&View>, main: &SnapshotId) -> Vec<String> {
     let views = match hub.views.list(ViewList { project: Some(project.clone()) }).await {
         Ok(list) => list.views,
         Err(err) => {
@@ -30,18 +31,21 @@ async fn advance(hub: &Services, project: &ProjectId, landed: Option<&View>, mai
             return Vec::new();
         }
     };
+    let mut moving = JoinSet::new();
+    for view in views.into_iter().filter(|view| follows(view, landed)) {
+        let (hub, main) = (hub.clone(), main.clone());
+        moving.spawn(async move { (hub.views.advance(&view.id, &main).await, view) });
+    }
     let mut skipped = Vec::new();
-    for view in views.iter().filter(|view| follows(view, landed)) {
-        match hub.views.advance(&view.id, main).await {
-            Ok(paths) if paths.is_empty() => {}
-            Ok(paths) => {
-                if view.kind == ViewKind::User {
-                    skipped.extend(paths);
-                }
-            }
-            Err(err) => tracing::warn!(view = %view.id, "could not advance view: {err}"),
+    while let Some(done) = moving.join_next().await {
+        match done {
+            Ok((Ok(paths), view)) if view.kind == ViewKind::User => skipped.extend(paths),
+            Ok((Ok(_), _)) => {}
+            Ok((Err(err), view)) => tracing::warn!(view = %view.id, "could not advance view: {err}"),
+            Err(err) => tracing::warn!(project = %project, "advancing a view stopped: {err}"),
         }
     }
+    skipped.sort();
     skipped
 }
 

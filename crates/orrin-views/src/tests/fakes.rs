@@ -17,6 +17,7 @@ use crate::service::ViewsService;
 
 pub struct Rig {
     pub dir: TempDir,
+    pub setup: Setup,
     pub hub: Hub,
     pub inner: Arc<Inner>,
     pub views: Arc<dyn Views>,
@@ -57,7 +58,7 @@ impl Rig {
             peers: Arc::new(Unavailable("peers")),
             git: Arc::new(Unavailable("git")),
         });
-        Self { dir, hub: setup.hub, inner, views, projects }
+        Self { dir, hub: setup.hub.clone(), setup, inner, views, projects }
     }
 
     pub fn folder(&self, files: &[(&str, &str)]) -> PathBuf {

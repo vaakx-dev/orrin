@@ -39,6 +39,7 @@ impl DiskStore {
                 report.freed += stored.len;
             }
         }
+        self.slices.keep_only(&live)?;
         self.clean_tmp();
         Ok(report)
     }

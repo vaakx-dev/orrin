@@ -2,9 +2,11 @@ mod content;
 mod disk;
 mod inner;
 mod ops;
+mod pools;
 mod service;
 mod slot;
 mod snapshots;
+mod spare;
 mod watch;
 
 #[cfg(test)]

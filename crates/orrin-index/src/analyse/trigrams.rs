@@ -1,8 +1,30 @@
+const BITSET_FROM: usize = 64 * 1024;
+
 pub fn of_content(bytes: &[u8]) -> Vec<u32> {
-    let mut grams: Vec<u32> = bytes.windows(3).filter(|w| !w.contains(&b'\n')).map(pack).collect();
+    let grams = bytes.windows(3).filter(|w| !w.contains(&b'\n')).map(pack);
+    if bytes.len() >= BITSET_FROM {
+        return distinct(grams);
+    }
+    let mut grams: Vec<u32> = grams.collect();
     grams.sort_unstable();
     grams.dedup();
     grams
+}
+
+fn distinct(grams: impl Iterator<Item = u32>) -> Vec<u32> {
+    let mut seen = vec![0u64; 1 << 18];
+    for gram in grams {
+        seen[(gram >> 6) as usize] |= 1 << (gram & 63);
+    }
+    let mut out = Vec::new();
+    for (at, &word) in seen.iter().enumerate() {
+        let mut rest = word;
+        while rest != 0 {
+            out.push(((at as u32) << 6) | rest.trailing_zeros());
+            rest &= rest - 1;
+        }
+    }
+    out
 }
 
 pub fn of_literal(bytes: &[u8], case_sensitive: bool) -> Vec<u32> {
@@ -37,5 +59,14 @@ mod tests {
         assert!(!query.is_empty());
         assert!(query.iter().all(|g| content.binary_search(g).is_ok()));
         assert_eq!(decode(&encode(&content)), content);
+    }
+
+    #[test]
+    fn big_content_gives_the_same_grams() {
+        let text: String = (0..20_000).map(|i| format!("line {i} Value_{}\n", i % 97)).collect();
+        let mut sorted: Vec<u32> = text.as_bytes().windows(3).filter(|w| !w.contains(&b'\n')).map(pack).collect();
+        sorted.sort_unstable();
+        sorted.dedup();
+        assert_eq!(of_content(text.as_bytes()), sorted);
     }
 }

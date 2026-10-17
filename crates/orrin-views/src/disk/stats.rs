@@ -4,27 +4,47 @@ use std::path::Path;
 use std::time::SystemTime;
 
 use orrin_core::model::{FileState, Mode};
-use orrin_core::service::Store;
 use orrin_core::{Error, Hash, Result};
+use rayon::prelude::*;
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone)]
+use crate::disk::rules::Found;
+
+#[derive(Clone, Serialize, Deserialize)]
 struct Stat {
     size: u64,
     modified: Option<SystemTime>,
     state: FileState,
 }
 
-#[derive(Default)]
-pub struct Stats(HashMap<String, Stat>);
+#[derive(Default, Serialize, Deserialize)]
+pub struct Stats {
+    files: HashMap<String, Stat>,
+    #[serde(skip)]
+    changed: bool,
+}
 
 impl Stats {
     pub fn state(&mut self, rel: &str, abs: &Path, meta: &Metadata) -> Result<FileState> {
-        if let Some(stat) = self.0.get(rel).filter(|s| matches(s, meta)) {
+        if let Some(stat) = self.files.get(rel).filter(|s| matches(s, meta)) {
             return Ok(stat.state.clone());
         }
         let state = FileState { hash: hash_file(abs)?, size: meta.len(), mode: mode_of(meta) };
         self.remember(rel, meta, state.hash.clone());
         Ok(state)
+    }
+
+    pub fn states(&mut self, found: &[Found]) -> Result<Vec<FileState>> {
+        let hashed: Vec<Option<Result<Hash>>> =
+            found.par_iter().map(|f| self.known(&f.rel, &f.meta).is_none().then(|| hash_file(&f.abs))).collect();
+        found
+            .iter()
+            .zip(hashed)
+            .map(|(f, hash)| match hash {
+                Some(hash) => Ok(self.remember(&f.rel, &f.meta, hash?)),
+                None => Ok(self.files[&f.rel].state.clone()),
+            })
+            .collect()
     }
 
     pub fn disk_state(&mut self, rel: &str, abs: &Path) -> Result<Option<FileState>> {
@@ -38,7 +58,9 @@ impl Stats {
 
     pub fn remember(&mut self, rel: &str, meta: &Metadata, hash: Hash) -> FileState {
         let state = FileState { hash, size: meta.len(), mode: mode_of(meta) };
-        self.0.insert(rel.to_string(), Stat { size: meta.len(), modified: meta.modified().ok(), state: state.clone() });
+        let stat = Stat { size: meta.len(), modified: meta.modified().ok(), state: state.clone() };
+        self.files.insert(rel.to_string(), stat);
+        self.changed = true;
         state
     }
 
@@ -48,35 +70,44 @@ impl Stats {
         Ok(())
     }
 
-    pub fn remember_put(&mut self, rel: &str, abs: &Path, store: &dyn Store) -> Result<FileState> {
-        let meta = std::fs::metadata(abs)?;
-        let hash = store.put_file(abs)?;
-        Ok(self.remember(rel, &meta, hash))
-    }
-
     pub fn known(&self, rel: &str, meta: &Metadata) -> Option<Hash> {
-        self.0.get(rel).filter(|s| matches(s, meta)).map(|s| s.state.hash.clone())
+        self.files.get(rel).filter(|s| matches(s, meta)).map(|s| s.state.hash.clone())
     }
 
     pub fn rename(&mut self, from: &str, to: &str) {
-        if let Some(stat) = self.0.remove(from) {
-            self.0.insert(to.to_string(), stat);
+        if let Some(stat) = self.files.remove(from) {
+            self.files.insert(to.to_string(), stat);
+            self.changed = true;
         }
     }
 
     pub fn forget(&mut self, rel: &str) {
-        self.0.remove(rel);
+        self.changed |= self.files.remove(rel).is_some();
     }
 
     pub fn forget_under(&mut self, rel: &str) -> Vec<String> {
         let prefix = format!("{rel}/");
-        let gone: Vec<String> = self.0.keys().filter(|k| *k == rel || k.starts_with(&prefix)).cloned().collect();
+        let gone: Vec<String> = self.files.keys().filter(|k| *k == rel || k.starts_with(&prefix)).cloned().collect();
         gone.iter().for_each(|k| self.forget(k));
         gone
     }
 
     pub fn keep_only(&mut self, seen: &HashSet<String>) {
-        self.0.retain(|k, _| seen.contains(k));
+        let before = self.files.len();
+        self.files.retain(|k, _| seen.contains(k));
+        self.changed |= self.files.len() != before;
+    }
+
+    pub fn take_changed(&mut self) -> bool {
+        std::mem::take(&mut self.changed)
+    }
+
+    pub fn load(path: &Path) -> Self {
+        std::fs::read(path).ok().and_then(|bytes| serde_json::from_slice(&bytes).ok()).unwrap_or_default()
+    }
+
+    pub fn to_bytes(&self) -> Result<Vec<u8>> {
+        Ok(serde_json::to_vec(self)?)
     }
 }
 

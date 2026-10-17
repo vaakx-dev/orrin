@@ -1,12 +1,21 @@
 use std::path::Path;
 
+use orrin_core::model::Snapshot;
 use orrin_core::service::{GcReport, Materialise, Service, Store};
-use orrin_core::{Hash, Result};
+use orrin_core::{Hash, Result, SnapshotId};
 
 use crate::disk::DiskStore;
 use crate::verified::Verified;
 
 impl Service for DiskStore {}
+
+impl DiskStore {
+    pub(crate) fn verified_bytes(&self, hash: &Hash) -> Result<Vec<u8>> {
+        let mut out = Verified::new(Vec::new());
+        self.write_to(hash, &mut out)?;
+        out.finish(hash)
+    }
+}
 
 impl Store for DiskStore {
     fn put(&self, bytes: &[u8]) -> Result<Hash> {
@@ -18,9 +27,7 @@ impl Store for DiskStore {
     }
 
     fn get(&self, hash: &Hash) -> Result<Vec<u8>> {
-        let mut out = Verified::new(Vec::new());
-        self.write_to(hash, &mut out)?;
-        out.finish(hash)
+        self.verified_bytes(hash)
     }
 
     fn size(&self, hash: &Hash) -> Result<u64> {
@@ -40,6 +47,7 @@ impl Store for DiskStore {
     }
 
     fn gc(&self, roots: &[Hash]) -> Result<GcReport> {
+        self.forget_snapshots();
         self.collect(roots)
     }
 
@@ -53,5 +61,13 @@ impl Store for DiskStore {
 
     fn put_raw(&self, hash: &Hash, bytes: &[u8]) -> Result<()> {
         self.put_raw_object(hash, bytes)
+    }
+
+    fn put_snapshot(&self, snapshot: &Snapshot) -> Result<SnapshotId> {
+        self.save_snapshot(snapshot)
+    }
+
+    fn snapshot(&self, id: &SnapshotId) -> Result<Snapshot> {
+        self.load_snapshot(id)
     }
 }

@@ -40,6 +40,7 @@ impl Db {
         let conn = Connection::open(path).map_err(sql)?;
         conn.busy_timeout(Duration::from_secs(5)).map_err(sql)?;
         conn.pragma_update(None, "journal_mode", "WAL").map_err(sql)?;
+        conn.pragma_update(None, "synchronous", "NORMAL").map_err(sql)?;
         conn.pragma_update(None, "foreign_keys", true).map_err(sql)?;
         conn.execute_batch(SCHEMA).map_err(sql)?;
         Ok(Self(Mutex::new(conn)))

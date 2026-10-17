@@ -17,21 +17,24 @@ impl Inner {
         let mut record = slot.record.lock().await;
         let base = self.hub.store.snapshot(&record.view.base)?;
         let edits = self.scan(&slot, &rules, &base)?;
-        record.captured = edits.clone();
-        self.save(&record)?;
+        if record.captured != edits {
+            record.captured = edits.clone();
+            self.save(&record)?;
+        }
+        self.save_stats(&slot)?;
         Ok(edits)
     }
 
     fn scan(&self, slot: &Slot, rules: &Rules, base: &Snapshot) -> Result<Edits> {
         let mut edits = Edits::new();
         let mut seen = HashSet::new();
+        let found = rules.walk();
         let mut stats = slot.stats();
-        for found in rules.walk() {
-            let state = stats.state(&found.rel, &found.abs, &found.meta)?;
+        for (found, state) in found.iter().zip(stats.states(&found)?) {
             if !same_entry(base, &found.rel, &state) {
                 edits.insert(found.rel.clone(), Some(self.stored(state, &found.abs)?));
             }
-            seen.insert(found.rel);
+            seen.insert(found.rel.clone());
         }
         let unseen: Vec<&Entry> = base.entries.iter().filter(|e| !seen.contains(&e.path)).collect();
         for entry in unseen {

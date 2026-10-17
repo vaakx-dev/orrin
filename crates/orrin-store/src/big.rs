@@ -4,10 +4,12 @@ use std::path::PathBuf;
 
 use fastcdc::v2020::StreamCDC;
 use orrin_core::{Error, Hash, Result};
+use rayon::prelude::*;
 
 use crate::disk::{DiskStore, place_new};
 use crate::object::{Manifest, Piece, offsets};
 use crate::seal::seal;
+use crate::slices::Slice;
 use crate::verified::Verified;
 
 const MIN: usize = 16 * 1024;
@@ -46,12 +48,14 @@ impl DiskStore {
         })?;
         place_new(&temp, &path)?;
         self.index(hash, pieces)?;
+        pieces.par_iter().for_each(|piece| _ = fs::remove_file(self.object_path(&piece.hash)));
         Ok(path)
     }
 
     pub(crate) fn point(&self, chunk: &Hash, file: &Hash, offset: u64, len: u64) -> Result<()> {
-        let slice = Manifest::Slice { file: file.clone(), offset, len }.encode();
-        self.replace_object(chunk, &slice)
+        self.slices.point(file, &Slice { chunk, offset, len })?;
+        let _ = fs::remove_file(self.object_path(chunk));
+        Ok(())
     }
 
     fn write_big(&self, reader: impl Read, temp: &std::path::Path) -> Result<(Hash, Vec<Piece>)> {
@@ -82,15 +86,8 @@ impl DiskStore {
     }
 
     fn index(&self, file: &Hash, pieces: &[Piece]) -> Result<()> {
-        for (piece, offset) in offsets(pieces) {
-            if !self.is_slice(&piece.hash) {
-                self.point(&piece.hash, file, offset, piece.len)?;
-            }
-        }
-        Ok(())
-    }
-
-    fn is_slice(&self, hash: &Hash) -> bool {
-        matches!(self.manifest(hash), Ok(Some(Manifest::Slice { .. })))
+        let slices: Vec<Slice> =
+            offsets(pieces).map(|(piece, offset)| Slice { chunk: &piece.hash, offset, len: piece.len }).collect();
+        self.slices.add(file, &slices)
     }
 }

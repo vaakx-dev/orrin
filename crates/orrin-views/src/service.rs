@@ -1,4 +1,5 @@
-use std::path::Path;
+use std::collections::BTreeSet;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -7,10 +8,11 @@ use orrin_core::api::{
     Changes, ChangesOutput, Create, Delete, Diff, DiffOutput, Done, Move, Patch, ProjectOpened, ProjectsImport, Read,
     ReadOutput, Touched, ViewCreate, ViewDrop, ViewList, ViewListOutput, Written,
 };
-use orrin_core::model::View;
+use orrin_core::model::{View, ViewKind};
 use orrin_core::service::{Edits, Service, Views};
 use orrin_core::{ChangeId, ProjectId, Result, SnapshotId, ViewId};
 
+use crate::disk::files::remove_any;
 use crate::inner::Inner;
 use crate::slot::Slot;
 use crate::watch;
@@ -21,15 +23,20 @@ pub struct ViewsService(pub Arc<Inner>);
 
 impl Service for ViewsService {
     fn start(&self) -> Result<()> {
-        for slot in self.0.slots() {
-            if slot.record.try_lock().is_ok_and(|r| Slot::is_open(&r)) {
-                watch::watch(&self.0, &slot);
-            }
+        let open: Vec<Arc<Slot>> =
+            self.0.slots().into_iter().filter(|s| s.record.try_lock().is_ok_and(|r| Slot::is_open(&r))).collect();
+        for slot in &open {
+            watch::watch(&self.0, slot);
         }
         let Ok(runtime) = tokio::runtime::Handle::try_current() else { return Ok(()) };
         if let Some(rx) = self.0.hits_rx.lock().unwrap_or_else(|e| e.into_inner()).take() {
             runtime.spawn(watch::run(self.0.clone(), rx));
         }
+        let orphans = std::mem::take(&mut *self.0.orphans.lock().unwrap_or_else(|e| e.into_inner()));
+        runtime.spawn_blocking(move || orphans.iter().map(PathBuf::as_path).for_each(remove_any));
+        let busy: BTreeSet<ProjectId> =
+            open.iter().filter(|s| s.kind == ViewKind::Worker).map(|s| s.project.clone()).collect();
+        busy.into_iter().for_each(|project| self.refill(project));
         let inner = self.0.clone();
         runtime.spawn(async move {
             loop {
@@ -43,14 +50,30 @@ impl Service for ViewsService {
     }
 }
 
+impl ViewsService {
+    fn refill(&self, project: ProjectId) {
+        let Ok(runtime) = tokio::runtime::Handle::try_current() else { return };
+        let inner = self.0.clone();
+        runtime.spawn(async move {
+            if let Err(err) = inner.refill(project.clone()).await {
+                tracing::warn!("could not prepare a spare view for {project}: {err}");
+            }
+        });
+    }
+}
+
 #[async_trait]
 impl Views for ViewsService {
     async fn import(&self, input: ProjectsImport) -> Result<ProjectOpened> {
-        self.0.import(input).await
+        let opened = self.0.import(input).await?;
+        self.refill(opened.project.id.clone());
+        Ok(opened)
     }
 
     async fn create(&self, input: ViewCreate) -> Result<View> {
-        self.0.create(input).await
+        let view = self.0.create(input).await?;
+        self.refill(view.project.clone());
+        Ok(view)
     }
 
     async fn list(&self, input: ViewList) -> Result<ViewListOutput> {
