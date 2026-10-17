@@ -8,7 +8,7 @@ cache = "sccache"
 
 [recipes.test]
 inputs = ["Cargo.toml", "Cargo.lock", "crates/**"]
-command = "cargo test --workspace {args}"
+command = "cargo test {args}"
 needs = ["cargo"]
 cpu = 12
 warm = true
