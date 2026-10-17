@@ -10,9 +10,9 @@ use orrin_core::{Error, Hash, JobId, Result};
 
 use crate::context::Context;
 use crate::key::{self, Action};
-use crate::{linked, manifest};
 use crate::plan::{Plan, tool_names};
 use crate::tools;
+use crate::{linked, manifest};
 
 type Boxed<'a, T> = Pin<Box<dyn Future<Output = Result<T>> + Send + 'a>>;
 

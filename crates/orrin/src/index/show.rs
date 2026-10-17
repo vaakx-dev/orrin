@@ -75,8 +75,13 @@ mod tests {
 
     #[test]
     fn outlines_indent_by_depth() {
-        let item =
-            |name: &str, depth, line| OutlineItem { kind: "heading".into(), name: name.into(), depth, line, anchor: None };
+        let item = |name: &str, depth, line| OutlineItem {
+            kind: "heading".into(),
+            name: name.into(),
+            depth,
+            line,
+            anchor: None,
+        };
         let out = OutlineOutput {
             clock: Clock(1),
             path: "README.md".into(),

@@ -20,6 +20,7 @@ use tree_other::Tree;
 use tree_windows::Tree;
 
 #[derive(Clone, Copy, Debug, Default)]
+#[cfg_attr(not(windows), allow(dead_code))]
 pub struct Limits {
     pub cpu_percent: Option<u32>,
     pub memory_mb: Option<u64>,

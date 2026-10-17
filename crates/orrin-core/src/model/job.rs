@@ -81,4 +81,3 @@ pub struct Artifact {
     pub hash: Hash,
     pub size: u64,
 }
-

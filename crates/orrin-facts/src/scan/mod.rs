@@ -14,7 +14,7 @@ pub use path::which;
 
 use crate::book::{Book, Entry, modified, normalise, rank};
 use crate::probe::{Probe, parse_version, probe};
-use catalog::{SPECS, Spec, spec};
+use catalog::{SPECS, spec};
 
 pub struct Found {
     pub name: String,
@@ -78,19 +78,6 @@ fn gather() -> Vec<Found> {
     found
 }
 
-fn find_exe(dir: &Path, spec: &Spec) -> Option<PathBuf> {
-    for sub in spec.subdirs {
-        for exe in spec.exes() {
-            let candidate = dir.join(sub).join(executable(exe));
-            if candidate.is_file() {
-                return Some(candidate);
-            }
-        }
-    }
-    let prefix = spec.prefix?;
-    prefixed(dir, prefix).into_iter().next()
-}
-
 fn prefixed(dir: &Path, prefix: &str) -> Vec<PathBuf> {
     let Ok(entries) = std::fs::read_dir(dir) else { return Vec::new() };
     let mut found: Vec<PathBuf> = entries
@@ -105,10 +92,6 @@ fn prefixed(dir: &Path, prefix: &str) -> Vec<PathBuf> {
         .collect();
     newest_first(&mut found);
     found
-}
-
-fn executable(name: &str) -> String {
-    if cfg!(windows) { format!("{name}.exe") } else { name.to_string() }
 }
 
 fn newest_first(paths: &mut [PathBuf]) {

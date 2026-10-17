@@ -21,8 +21,8 @@ mod windows {
 
     use super::Found;
     use crate::book::normalise;
-    use crate::scan::catalog::SPECS;
-    use crate::scan::find_exe;
+    use crate::scan::catalog::{SPECS, Spec};
+    use crate::scan::prefixed;
 
     const APP_PATHS: &str = r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths";
     const UNINSTALL: &str = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall";
@@ -64,6 +64,19 @@ mod windows {
             }
         }
         keys
+    }
+
+    fn find_exe(dir: &Path, spec: &Spec) -> Option<PathBuf> {
+        for sub in spec.subdirs {
+            for exe in spec.exes() {
+                let candidate = dir.join(sub).join(format!("{exe}.exe"));
+                if candidate.is_file() {
+                    return Some(candidate);
+                }
+            }
+        }
+        let prefix = spec.prefix?;
+        prefixed(dir, prefix).into_iter().next()
     }
 
     fn names(display: &str, installer: &str) -> bool {

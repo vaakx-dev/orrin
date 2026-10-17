@@ -1,3 +1,4 @@
+#[cfg_attr(not(windows), allow(dead_code))]
 pub struct Spec {
     pub name: &'static str,
     pub exes: &'static [&'static str],
