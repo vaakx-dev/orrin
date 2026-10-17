@@ -27,6 +27,7 @@ pub fn key<'a>(ctx: &'a Context, plan: &'a Plan, name: &'a str, args: &'a [Strin
         for dep in &target.after {
             after.push(key(ctx, plan, dep, &[]).await?);
         }
+        after.extend(super::packages::keys(ctx, plan, target).await?);
         key::action(Action { name, target, args, snapshot: &plan.snapshot, tools: &tools, after: &after })
     })
 }

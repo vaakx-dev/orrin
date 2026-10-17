@@ -291,6 +291,7 @@ impl World {
             facts: Arc::new(OneTool),
             builds: Arc::new(none),
             cache: Arc::new(none),
+            packages: Arc::new(none),
             peers: Arc::new(none),
             git: Arc::new(none),
         });

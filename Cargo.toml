@@ -19,6 +19,7 @@ orrin-index = { path = "crates/orrin-index" }
 orrin-facts = { path = "crates/orrin-facts" }
 orrin-builds = { path = "crates/orrin-builds" }
 orrin-cache = { path = "crates/orrin-cache" }
+orrin-packages = { path = "crates/orrin-packages" }
 orrin-sync = { path = "crates/orrin-sync" }
 orrin-git = { path = "crates/orrin-git" }
 orrin-server = { path = "crates/orrin-server" }

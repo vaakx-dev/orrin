@@ -5,7 +5,7 @@ use crate::config::Config;
 use crate::events::Events;
 use crate::home::Home;
 use crate::identity::Identity;
-use crate::service::{Builds, Cache, Facts, Git, Index, Landing, Merger, Peers, Projects, Store, Views};
+use crate::service::{Builds, Cache, Facts, Git, Index, Landing, Merger, Packages, Peers, Projects, Store, Views};
 
 pub struct Services {
     pub home: Home,
@@ -21,6 +21,7 @@ pub struct Services {
     pub facts: Arc<dyn Facts>,
     pub builds: Arc<dyn Builds>,
     pub cache: Arc<dyn Cache>,
+    pub packages: Arc<dyn Packages>,
     pub peers: Arc<dyn Peers>,
     pub git: Arc<dyn Git>,
 }

@@ -17,6 +17,7 @@ pub struct Config {
     pub builds: BuildsConfig,
     pub maintenance: MaintenanceConfig,
     pub cache: CacheConfig,
+    pub packages: PackagesConfig,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -26,6 +27,18 @@ pub struct CacheConfig {
 }
 
 impl Default for CacheConfig {
+    fn default() -> Self {
+        Self { keep_days: 30 }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct PackagesConfig {
+    pub keep_days: u32,
+}
+
+impl Default for PackagesConfig {
     fn default() -> Self {
         Self { keep_days: 30 }
     }

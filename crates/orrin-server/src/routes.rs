@@ -111,6 +111,7 @@ fn sync(r: &mut Registry) {
     r.add(|h: Hub, i: api::SyncLogs| async move { h.builds.logs(i.0).await });
     r.add(|h: Hub, _: api::SyncFacts| async move { h.facts.list(api::Facts::default()).await });
     r.add(|h: Hub, i: api::SyncCache| async move { h.cache.find(i).await });
+    r.add(|h: Hub, i: api::SyncPackage| async move { h.packages.find(i).await });
 }
 
 #[cfg(test)]

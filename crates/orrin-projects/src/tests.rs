@@ -73,6 +73,7 @@ fn wire(setup: &Setup) -> Arc<dyn Projects> {
         facts: none.clone(),
         builds: none.clone(),
         cache: none.clone(),
+        packages: none.clone(),
         peers: none.clone(),
         git: none,
     });

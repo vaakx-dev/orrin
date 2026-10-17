@@ -2,6 +2,7 @@ mod after;
 mod compiler;
 mod folder;
 mod outputs;
+mod packages;
 mod placeholders;
 mod publish;
 pub mod steps;
@@ -10,7 +11,7 @@ mod workspace;
 
 use std::collections::BTreeMap;
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use orrin_core::model::{Artifact, Entry, Job, JobResult, JobState, Snapshot, Stream};
 use orrin_core::{Error, Hash, JobId, Result, now_ms};
@@ -22,6 +23,7 @@ use crate::process::{self, Exit, Limits, Spec};
 use crate::queue::{Need, Slot};
 use crate::table::Claim;
 use crate::tools::{self, Tools};
+use packages::Placed;
 use placeholders::Values;
 use workspace::Workspace;
 
@@ -47,7 +49,7 @@ pub async fn submit(ctx: &Arc<Context>, plan: Plan) -> Result<Job> {
         },
     };
     ctx.table.journal().args(&job.id, &plan.args);
-    let run = Run { ctx: ctx.clone(), plan: Arc::new(plan), tools, key, id: job.id.clone() };
+    let run = Run { ctx: ctx.clone(), plan: Arc::new(plan), tools, key, id: job.id.clone(), packages: OnceLock::new() };
     tokio::spawn(run.go(cancel));
     Ok(job)
 }
@@ -65,7 +67,8 @@ pub async fn resume(ctx: &Arc<Context>, job: &Job, args: Vec<String>, cancel: wa
     let plan = Plan::load(store, request)?;
     let tools = tools::resolve(&ctx.hub, &plan.tools()).await;
     let key = after::key(ctx, &plan, &plan.name, &plan.args).await?;
-    Run { ctx: ctx.clone(), plan: Arc::new(plan), tools, key, id: job.id.clone() }.go(cancel).await;
+    let run = Run { ctx: ctx.clone(), plan: Arc::new(plan), tools, key, id: job.id.clone(), packages: OnceLock::new() };
+    run.go(cancel).await;
     Ok(())
 }
 
@@ -91,6 +94,7 @@ struct Run {
     tools: Tools,
     key: Hash,
     id: JobId,
+    packages: OnceLock<Placed>,
 }
 
 impl Run {
@@ -120,6 +124,7 @@ impl Run {
         };
         let work = async {
             let extras = after::outputs(&self.ctx, &self.plan, &self.id).await?;
+            let _ = self.packages.set(packages::ensure(&self.ctx, &self.plan, &self.id).await?);
             Ok((extras, self.ctx.queue.acquire(need).await))
         };
         tokio::select! {
@@ -219,7 +224,8 @@ impl Run {
             target: &self.plan.name,
             args: &self.plan.args,
         };
-        let expanded = placeholders::expand(&tools::command_line(&target.command, &self.tools), &values);
+        let command = packages::expand(&target.command, self.packages.get().unwrap_or(&Vec::new()));
+        let expanded = placeholders::expand(&tools::command_line(&command, &self.tools), &values);
         let cores = self.ctx.queue.cores();
         let limits =
             Limits { cpu_percent: target.cpu.map(|c| c.saturating_mul(100) / cores), memory_mb: target.ram_mb };

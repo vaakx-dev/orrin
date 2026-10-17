@@ -28,7 +28,7 @@ pub enum Event {
     #[serde(rename = "pc.seen")]
     PcSeen { pc: Pc },
     #[serde(rename = "maintenance")]
-    Maintenance { thinned: u32, removed: u64, freed: u64 },
+    Maintenance { thinned: u32, packages: u32, removed: u64, freed: u64 },
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

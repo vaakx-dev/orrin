@@ -7,6 +7,7 @@ mod index;
 mod jobs;
 mod meta;
 mod objects;
+mod packages;
 mod pcs;
 mod projects;
 mod request;
@@ -22,6 +23,7 @@ pub use index::*;
 pub use jobs::*;
 pub use meta::*;
 pub use objects::*;
+pub use packages::*;
 pub use pcs::*;
 pub use projects::*;
 pub use request::Request;
@@ -85,6 +87,7 @@ requests! {
     SyncLogs => "sync.logs": JobLogsOutput,
     SyncFacts => "sync.facts": FactsOutput,
     SyncCache => "sync.cache": CacheEntry,
+    SyncPackage => "sync.package": PackageFound,
 }
 
 pub fn is_peer_request(name: &str) -> bool {

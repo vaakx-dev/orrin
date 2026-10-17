@@ -150,6 +150,7 @@ pub fn world(files: &[(&str, &str)]) -> World {
         facts: Arc::new(FakeFacts::default()),
         builds: builds.clone(),
         cache: Arc::new(Unavailable("cache")),
+        packages: Arc::new(Unavailable("packages")),
         peers: Arc::new(Unavailable("peers")),
         git: Arc::new(Unavailable("git")),
     });
@@ -169,7 +170,14 @@ impl World {
     }
 
     pub fn input(&self, target: &str) -> JobInput {
-        JobInput { project: self.project.clone(), view: None, target: target.into(), args: Vec::new(), pc: None }
+        JobInput {
+            project: self.project.clone(),
+            view: None,
+            snapshot: None,
+            target: target.into(),
+            args: Vec::new(),
+            pc: None,
+        }
     }
 
     pub async fn finished(&self, job: &JobId) -> Job {

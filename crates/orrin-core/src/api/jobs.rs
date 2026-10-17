@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::id::{JobId, PcId, ProjectId, ViewId};
+use crate::id::{JobId, PcId, ProjectId, SnapshotId, ViewId};
 use crate::model::{Artifact, Job, JobKind, LogLine};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -9,6 +9,8 @@ pub struct JobInput {
     pub project: ProjectId,
     #[serde(default)]
     pub view: Option<ViewId>,
+    #[serde(default)]
+    pub snapshot: Option<SnapshotId>,
     pub target: String,
     #[serde(default)]
     pub args: Vec<String>,

@@ -74,6 +74,10 @@ impl Home {
         self.root.join("runs")
     }
 
+    pub fn packages(&self) -> PathBuf {
+        self.root.join("packages")
+    }
+
     pub fn index(&self) -> PathBuf {
         self.root.join("index")
     }

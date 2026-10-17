@@ -17,8 +17,14 @@ pub async fn submit(api: &Api, kind: JobKind, args: &JobArgs) -> anyhow::Result<
         Some(name) => Some(api.pc(name).await?),
         None => None,
     };
-    let input =
-        JobInput { project: target.project.id, view: target.view, target: name.into(), args: args.args.clone(), pc };
+    let input = JobInput {
+        project: target.project.id,
+        view: target.view,
+        snapshot: None,
+        target: name.into(),
+        args: args.args.clone(),
+        pc,
+    };
     let job = send(api, kind, input).await?;
     if args.follow {
         if !api.json {

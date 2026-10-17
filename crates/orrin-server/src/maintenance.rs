@@ -40,11 +40,13 @@ pub async fn run(hub: &Hub) -> Result<Event> {
     let dropped = hub.cache.trim().await?;
     tracing::info!(dropped, "compiler cache trimmed");
     roots.extend(hub.cache.roots().await?);
+    let packages = hub.packages.clean().await?;
+    roots.extend(hub.packages.roots().await?);
     let store = hub.store.clone();
     let report = tokio::task::spawn_blocking(move || store.gc(&roots))
         .await
         .map_err(|err| Error::internal(err.to_string()))??;
-    let event = Event::Maintenance { thinned, removed: report.removed, freed: report.freed };
+    let event = Event::Maintenance { thinned, packages, removed: report.removed, freed: report.freed };
     hub.events.emit(event.clone());
     Ok(event)
 }

@@ -3051,6 +3051,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "orrin-packages"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "orrin-core",
+ "orrin-store",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "toml",
+ "tracing",
+ "walkdir",
+]
+
+[[package]]
 name = "orrin-projects"
 version = "0.1.0"
 dependencies = [
@@ -3077,6 +3093,7 @@ dependencies = [
  "orrin-index",
  "orrin-landing",
  "orrin-merge",
+ "orrin-packages",
  "orrin-projects",
  "orrin-store",
  "orrin-sync",

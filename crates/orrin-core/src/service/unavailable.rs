@@ -8,7 +8,10 @@ use crate::clock::Clock;
 use crate::error::{Error, Result};
 use crate::id::{ChangeId, Hash, PcId, ProjectId, SnapshotId, ViewId};
 use crate::model::{Change, Job, JobKind, Linked, Pc, PcSettings, Project, ProjectSettings, Tool, View};
-use crate::service::{Builds, Cache, Edits, Facts, GcReport, Git, Index, Landing, Materialise, Peers, Projects, Service, Store, Views};
+use crate::service::{
+    Builds, Cache, Edits, Facts, GcReport, Git, Index, Landing, Materialise, PackageNeed, PackageReady, Packages,
+    Peers, Projects, Service, Store, Views,
+};
 
 #[derive(Clone, Copy, Debug)]
 pub struct Unavailable(pub &'static str);
@@ -115,6 +118,15 @@ impl Cache for Unavailable {
     async fn put(&self, _: &str, _: Vec<u8>) -> Result<()> { self.err() }
     async fn find(&self, _: SyncCache) -> Result<CacheEntry> { Ok(CacheEntry::default()) }
     async fn trim(&self) -> Result<u64> { Ok(0) }
+    async fn roots(&self) -> Result<Vec<Hash>> { Ok(Vec::new()) }
+}
+
+#[async_trait]
+impl Packages for Unavailable {
+    async fn key(&self, _: PackageNeed) -> Result<Hash> { self.err() }
+    async fn ensure(&self, _: PackageNeed) -> Result<PackageReady> { self.err() }
+    async fn find(&self, _: SyncPackage) -> Result<PackageFound> { Ok(PackageFound { snapshot: None }) }
+    async fn clean(&self) -> Result<u32> { Ok(0) }
     async fn roots(&self) -> Result<Vec<Hash>> { Ok(Vec::new()) }
 }
 

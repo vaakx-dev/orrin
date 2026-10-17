@@ -6,9 +6,11 @@ use orrin_core::service::Services;
 use orrin_core::{Error, Result, SnapshotId, ViewId};
 
 pub async fn resolve(hub: &Services, input: &JobInput) -> Result<(SnapshotId, Snapshot)> {
-    match &input.view {
-        Some(view) => from_view(hub, input, view).await,
-        None => {
+    match (&input.view, &input.snapshot) {
+        (Some(_), Some(_)) => Err(Error::invalid("give a view or a snapshot, not both")),
+        (Some(view), None) => from_view(hub, input, view).await,
+        (None, Some(id)) => Ok((id.clone(), hub.store.snapshot(id)?)),
+        (None, None) => {
             let project = hub.projects.get(&input.project).await?;
             let snapshot = hub.store.snapshot(&project.main)?;
             Ok((project.main, snapshot))
