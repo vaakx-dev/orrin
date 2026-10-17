@@ -154,8 +154,8 @@ impl World {
         builds
     }
 
-    pub fn input(&self, recipe: &str) -> JobInput {
-        JobInput { project: self.project.clone(), view: None, recipe: recipe.into(), args: Vec::new(), pc: None }
+    pub fn input(&self, target: &str) -> JobInput {
+        JobInput { project: self.project.clone(), view: None, target: target.into(), args: Vec::new(), pc: None }
     }
 
     pub async fn finished(&self, job: &JobId) -> Job {

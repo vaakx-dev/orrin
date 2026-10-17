@@ -6,7 +6,7 @@ pub struct Values<'a> {
     pub dir: &'a Path,
     pub screenshots: &'a Path,
     pub job: &'a str,
-    pub recipe: &'a str,
+    pub target: &'a str,
     pub args: &'a [String],
 }
 
@@ -20,7 +20,7 @@ pub fn expand(command: &str, values: &Values) -> Expanded {
         ("{screenshots}", values.screenshots.to_string_lossy().into_owned()),
         ("{dir}", values.dir.to_string_lossy().into_owned()),
         ("{job}", values.job.to_string()),
-        ("{recipe}", values.recipe.to_string()),
+        ("{target}", values.target.to_string()),
         ("{args}", process::join_args(values.args)),
     ];
     let mut out = String::with_capacity(command.len());
@@ -52,8 +52,8 @@ mod tests {
         let dir = Path::new("runs").join("j1");
         let shots = dir.join("shots");
         let args = vec!["--release".to_string()];
-        let values = Values { dir: &dir, screenshots: &shots, job: "j1", recipe: "app", args: &args };
-        let expanded = expand("tool {recipe} -o {dir} -s {screenshots} {job} {args} {keep}", &values);
+        let values = Values { dir: &dir, screenshots: &shots, job: "j1", target: "app", args: &args };
+        let expanded = expand("tool {target} -o {dir} -s {screenshots} {job} {args} {keep}", &values);
         let want = format!("tool app -o {} -s {} j1 --release {{keep}}", dir.display(), shots.display());
         assert_eq!(expanded.command, want);
         assert!(expanded.took_args);

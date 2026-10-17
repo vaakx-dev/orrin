@@ -9,7 +9,7 @@ pub struct JobInput {
     pub project: ProjectId,
     #[serde(default)]
     pub view: Option<ViewId>,
-    pub recipe: String,
+    pub target: String,
     #[serde(default)]
     pub args: Vec<String>,
     #[serde(default)]

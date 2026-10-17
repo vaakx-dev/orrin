@@ -221,6 +221,9 @@ impl Views for FolderViews {
     async fn landed(&self, _: &ViewId, _: &ChangeId) -> Result<()> {
         nope()
     }
+    async fn link(&self, _: &ProjectId, _: Linked) -> Result<()> {
+        nope()
+    }
 }
 
 pub struct OneTool;

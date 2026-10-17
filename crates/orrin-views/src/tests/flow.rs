@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use orrin_core::api::*;
-use orrin_core::model::{Change, FileStatus, SHARE_FROM, View, ViewState};
+use orrin_core::model::{Change, Entry, FileStatus, Linked, SHARE_FROM, Snapshot, View, ViewState};
 use orrin_core::service::Projects;
 use orrin_core::{ChangeId, ProjectId, now_ms};
 
@@ -243,4 +243,36 @@ async fn watcher_reports_outside_edits() {
     })
     .await;
     assert!(seen.is_ok());
+}
+
+#[tokio::test]
+async fn linked_outputs_follow_the_latest_install_and_stay_out_of_changes() {
+    let rig = Rig::new(1 << 20);
+    let manifest = r#"[targets.install]
+outputs = ["node_modules/**"]
+scratch = ["node_modules/.cache/**"]
+link_outputs = true
+"#;
+    let opened = import(&rig, &[("orrin.toml", manifest), ("package.json", "{}")]).await;
+    let project = opened.project.id.clone();
+    let view = worker(&rig, &project).await;
+    let install = |files: &[(&str, &str)]| {
+        let entries = files.iter().map(|(path, body)| Entry {
+            path: path.to_string(),
+            hash: rig.hub.store.put(body.as_bytes()).unwrap(),
+            size: body.len() as u64,
+            mode: Default::default(),
+        });
+        let files = rig.hub.store.put_snapshot(&Snapshot::new(entries.collect())).unwrap();
+        Linked { target: "install".into(), files }
+    };
+    let first = install(&[("node_modules/a/index.js", "a1"), ("node_modules/old.js", "x")]);
+    rig.views.link(&project, first).await.unwrap();
+    std::fs::create_dir_all(view.path.join("node_modules/.cache")).unwrap();
+    std::fs::write(view.path.join("node_modules/.cache/hit"), "c").unwrap();
+    rig.views.link(&project, install(&[("node_modules/a/index.js", "a2")])).await.unwrap();
+    assert_eq!(std::fs::read_to_string(view.path.join("node_modules/a/index.js")).unwrap(), "a2");
+    assert!(!view.path.join("node_modules/old.js").exists());
+    assert!(view.path.join("node_modules/.cache/hit").exists());
+    assert!(rig.views.changes(Changes { project, view: view.id }).await.unwrap().files.is_empty());
 }

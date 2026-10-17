@@ -1,5 +1,3 @@
-use std::collections::BTreeMap;
-
 use serde::{Deserialize, Serialize};
 
 use crate::clock::Millis;
@@ -37,7 +35,7 @@ pub struct Job {
     pub id: JobId,
     pub project: ProjectId,
     pub kind: JobKind,
-    pub recipe: String,
+    pub target: String,
     pub snapshot: SnapshotId,
     pub pc: PcId,
     pub state: JobState,
@@ -84,61 +82,3 @@ pub struct Artifact {
     pub size: u64,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default, deny_unknown_fields)]
-pub struct Manifest {
-    pub include: Vec<String>,
-    pub ignore: Vec<String>,
-    pub recipes: BTreeMap<String, Recipe>,
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default, deny_unknown_fields)]
-pub struct Recipe {
-    pub inputs: Vec<String>,
-    pub command: String,
-    pub outputs: Vec<String>,
-    pub needs: Vec<String>,
-    pub cpu: Option<u32>,
-    pub ram_mb: Option<u64>,
-    pub gpu: bool,
-    pub after: Vec<String>,
-    pub cache: CompilerCache,
-    pub warm: Warm,
-    pub share: Vec<String>,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum Warm {
-    On(bool),
-    Pool(u32),
-}
-
-impl Default for Warm {
-    fn default() -> Self {
-        Self::On(false)
-    }
-}
-
-impl Warm {
-    pub fn pool(self, default: u32) -> Option<u32> {
-        match self {
-            Self::On(true) => Some(default.max(1)),
-            Self::Pool(size) if size > 0 => Some(size),
-            _ => None,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum CompilerCache {
-    #[default]
-    None,
-    Sccache,
-    Ccache,
-    Scons,
-}
-
-pub const MANIFEST_PATH: &str = "orrin.toml";

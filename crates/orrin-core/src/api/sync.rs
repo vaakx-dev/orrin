@@ -116,7 +116,7 @@ pub struct SyncJob {
     pub kind: JobKind,
     pub project: ProjectId,
     pub snapshot: SnapshotId,
-    pub recipe: String,
+    pub target: String,
     #[serde(default)]
     pub args: Vec<String>,
     #[serde(default)]

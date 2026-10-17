@@ -17,7 +17,7 @@ mod cmd {
     pub const LIB: &str = "echo built> lib.txt";
     pub const OTHER: &str = "echo other> other.txt";
     pub const APP: &str = "type lib.txt > app.out & if exist other.txt echo leaked> leak.out";
-    pub const WARM: &str = "echo {recipe}>> stamp.out";
+    pub const WARM: &str = "echo {target}>> stamp.out";
     pub const LIB_OBJ: &str = "mkdir obj & echo obj> obj\\x.o & echo built> lib.txt";
     pub const USE_OBJ: &str = "type obj\\x.o > app.out";
 }
@@ -31,13 +31,13 @@ mod cmd {
     pub const LIB: &str = "echo built > lib.txt";
     pub const OTHER: &str = "echo other > other.txt";
     pub const APP: &str = "cat lib.txt > app.out; if [ -f other.txt ]; then echo leaked > leak.out; fi";
-    pub const WARM: &str = "echo {recipe} >> stamp.out";
+    pub const WARM: &str = "echo {target} >> stamp.out";
     pub const LIB_OBJ: &str = "mkdir -p obj; echo obj > obj/x.o; echo built > lib.txt";
     pub const USE_OBJ: &str = "cat obj/x.o > app.out";
 }
 
 fn manifest(name: &str, command: &str) -> String {
-    format!("[recipes.{name}]\ncommand = '{command}'\noutputs = [\"*.txt\"]\ncpu = 1\nram_mb = 256\n")
+    format!("[targets.{name}]\ncommand = '{command}'\noutputs = [\"*.txt\"]\ncpu = 1\nram_mb = 256\n")
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -105,8 +105,8 @@ async fn cancel_kills_the_job() {
     assert!(started.elapsed() < Duration::from_secs(5));
 }
 
-async fn outputs(w: &World, kind: JobKind, recipe: &str) -> Vec<(String, String)> {
-    let job = w.builds.submit(kind, w.input(recipe)).await.unwrap();
+async fn outputs(w: &World, kind: JobKind, target: &str) -> Vec<(String, String)> {
+    let job = w.builds.submit(kind, w.input(target)).await.unwrap();
     let job = w.finished(&job.id).await;
     assert_eq!(job.state, JobState::Succeeded, "{job:?}");
     let artifacts = w.builds.artifacts(JobRef { job: job.id }).await.unwrap().artifacts;
@@ -116,9 +116,9 @@ async fn outputs(w: &World, kind: JobKind, recipe: &str) -> Vec<(String, String)
 #[tokio::test(flavor = "multi_thread")]
 async fn after_brings_only_its_outputs() {
     let manifest = format!(
-        "[recipes.lib]\ncommand = '{}'\noutputs = [\"*.txt\"]\n\
-         [recipes.other]\ncommand = '{}'\noutputs = [\"*.txt\"]\n\
-         [recipes.app]\ncommand = '{}'\noutputs = [\"*.out\"]\nafter = [\"lib\"]\n",
+        "[targets.lib]\ncommand = '{}'\noutputs = [\"*.txt\"]\n\
+         [targets.other]\ncommand = '{}'\noutputs = [\"*.txt\"]\n\
+         [targets.app]\ncommand = '{}'\noutputs = [\"*.out\"]\nafter = [\"lib\"]\n",
         cmd::LIB,
         cmd::OTHER,
         cmd::APP
@@ -136,8 +136,8 @@ async fn after_brings_only_its_outputs() {
 #[tokio::test(flavor = "multi_thread")]
 async fn share_carries_build_files_from_the_after_warm_folder() {
     let manifest = format!(
-        "[recipes.lib]\ncommand = '{}'\noutputs = [\"lib.txt\"]\nwarm = true\n\
-         [recipes.app]\ncommand = '{}'\noutputs = [\"*.out\"]\nafter = [\"lib\"]\nwarm = 2\nshare = [\"obj/**\"]\n",
+        "[targets.lib]\ncommand = '{}'\noutputs = [\"lib.txt\"]\nwarm = true\n\
+         [targets.app]\ncommand = '{}'\noutputs = [\"*.out\"]\nafter = [\"lib\"]\nwarm = 2\nshare = [\"obj/**\"]\n",
         cmd::LIB_OBJ,
         cmd::USE_OBJ
     );
@@ -148,9 +148,9 @@ async fn share_carries_build_files_from_the_after_warm_folder() {
     assert!(logs.iter().any(|line| line == "share from lib: 1 copied, 0 already in place"), "{logs:?}");
 }
 
-async fn job_of(w: &World, recipe: &str) -> orrin_core::JobId {
+async fn job_of(w: &World, target: &str) -> orrin_core::JobId {
     let jobs = w.builds.list(Default::default()).await.unwrap().jobs;
-    jobs.into_iter().rev().find(|job| job.recipe == recipe).unwrap().id
+    jobs.into_iter().rev().find(|job| job.target == target).unwrap().id
 }
 
 async fn log_text(w: &World, job: &orrin_core::JobId) -> Vec<String> {
@@ -160,7 +160,7 @@ async fn log_text(w: &World, job: &orrin_core::JobId) -> Vec<String> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn warm_folders_keep_build_state_between_runs() {
-    let manifest = format!("[recipes.warm]\ncommand = '{}'\noutputs = [\"*.out\"]\nwarm = true\n", cmd::WARM);
+    let manifest = format!("[targets.warm]\ncommand = '{}'\noutputs = [\"*.out\"]\nwarm = true\n", cmd::WARM);
     let w = world(&[("orrin.toml", &manifest)]);
     outputs(&w, JobKind::Run, "warm").await;
     let second = outputs(&w, JobKind::Run, "warm").await;
@@ -170,7 +170,7 @@ async fn warm_folders_keep_build_state_between_runs() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn finished_jobs_survive_a_restart() {
-    let manifest = format!("[recipes.lib]\ncommand = '{}'\noutputs = [\"*.txt\"]\n", cmd::LIB);
+    let manifest = format!("[targets.lib]\ncommand = '{}'\noutputs = [\"*.txt\"]\n", cmd::LIB);
     let w = world(&[("orrin.toml", &manifest)]);
     let job = w.builds.submit(JobKind::Build, w.input("lib")).await.unwrap();
     let job = w.finished(&job.id).await;

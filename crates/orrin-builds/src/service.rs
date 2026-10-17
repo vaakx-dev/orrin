@@ -3,12 +3,12 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use orrin_core::api::{JobArtifactsOutput, JobInput, JobList, JobListOutput, JobLogs, JobLogsOutput, JobRef, SyncJob};
-use orrin_core::model::{Job, JobKind};
+use orrin_core::model::{Job, JobKind, Linked};
 use orrin_core::service::{Builds, Service, Setup};
-use orrin_core::{Error, Hash, Result};
+use orrin_core::{Error, Hash, ProjectId, Result};
 
 use crate::context::Context;
-use crate::plan::{Plan, Target};
+use crate::plan::{Plan, Request};
 use crate::remote::{self, Place};
 use crate::roots;
 use crate::{recover, runner, source};
@@ -42,9 +42,9 @@ impl Service for BuildService {
 impl Builds for BuildService {
     async fn submit(&self, kind: JobKind, input: JobInput) -> Result<Job> {
         let (snapshot_id, snapshot) = source::resolve(&self.ctx.hub, &input).await?;
-        let target =
-            Target { kind, project: input.project, snapshot_id, snapshot, recipe: input.recipe, args: input.args };
-        let plan = Plan::load(&*self.ctx.hub.store, target)?;
+        let request =
+            Request { kind, project: input.project, snapshot_id, snapshot, target: input.target, args: input.args };
+        let plan = Plan::load(&*self.ctx.hub.store, request)?;
         match remote::place(&self.ctx, &plan, input.pc.as_ref()).await? {
             Place::Local => runner::submit(&self.ctx, plan).await,
             Place::Peer(pc) => Ok(remote::submit(&self.ctx, plan, pc)),
@@ -68,15 +68,15 @@ impl Builds for BuildService {
         if missing > 0 {
             return Err(Error::not_found(format!("{missing} input files are missing")));
         }
-        let target = Target {
+        let request = Request {
             kind: input.kind,
             project: input.project,
             snapshot_id: input.snapshot,
             snapshot,
-            recipe: input.recipe,
+            target: input.target,
             args: input.args,
         };
-        runner::submit(&self.ctx, Plan::load(store, target)?).await
+        runner::submit(&self.ctx, Plan::load(store, request)?).await
     }
 
     async fn status(&self, input: JobRef) -> Result<Job> {
@@ -112,5 +112,9 @@ impl Builds for BuildService {
 
     async fn roots(&self) -> Result<Vec<Hash>> {
         Ok(roots::collect(&self.ctx))
+    }
+
+    async fn linked(&self, project: &ProjectId) -> Result<Vec<Linked>> {
+        Ok(self.ctx.links.all(project))
     }
 }

@@ -34,7 +34,12 @@ impl Rules {
         if root.join(".gitignore").is_file() {
             git.add(root.join(".gitignore"));
         }
-        let extra = [".git/".to_string()].into_iter().chain(manifest.ignore).chain(settings.iter().cloned());
+        let linked = manifest.targets.into_values().filter(|t| t.link_outputs).flat_map(|t| [t.outputs, t.scratch]);
+        let extra = [".git/".to_string()]
+            .into_iter()
+            .chain(manifest.ignore)
+            .chain(linked.flatten())
+            .chain(settings.iter().cloned());
         let matchers = Matchers {
             git: Arc::new(git.build().unwrap_or_else(|_| Gitignore::empty())),
             include: Arc::new(matcher(root, manifest.include.iter().cloned())),

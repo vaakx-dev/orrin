@@ -3,6 +3,7 @@ mod compiler;
 mod folder;
 mod outputs;
 mod placeholders;
+mod publish;
 pub mod warm;
 mod workspace;
 
@@ -15,7 +16,7 @@ use orrin_core::{Error, Hash, JobId, Result, now_ms};
 use tokio::sync::watch;
 
 use crate::context::Context;
-use crate::plan::{Plan, Target};
+use crate::plan::{Plan, Request};
 use crate::process::{self, Exit, Limits, Spec};
 use crate::queue::{Need, Slot};
 use crate::table::Claim;
@@ -52,15 +53,15 @@ pub async fn submit(ctx: &Arc<Context>, plan: Plan) -> Result<Job> {
 
 pub async fn resume(ctx: &Arc<Context>, job: &Job, args: Vec<String>, cancel: watch::Receiver<bool>) -> Result<()> {
     let store = &*ctx.hub.store;
-    let target = Target {
+    let request = Request {
         kind: job.kind,
         project: job.project.clone(),
         snapshot_id: job.snapshot.clone(),
         snapshot: store.snapshot(&job.snapshot)?,
-        recipe: job.recipe.clone(),
+        target: job.target.clone(),
         args,
     };
-    let plan = Plan::load(store, target)?;
+    let plan = Plan::load(store, request)?;
     let tools = tools::resolve(&ctx.hub, &plan.tools()).await;
     let key = after::key(ctx, &plan, &plan.name, &plan.args).await?;
     Run { ctx: ctx.clone(), plan: Arc::new(plan), tools, key, id: job.id.clone() }.go(cancel).await;
@@ -76,6 +77,7 @@ fn cached(ctx: &Context, plan: &Plan, hash: Hash, result: JobResult) -> Job {
     job.started_at = Some(now);
     job.finished_at = Some(now);
     job.result = Some(hash);
+    publish::publish(ctx, plan, &result.artifacts);
     ctx.table.insert(job.clone());
     ctx.table.set_artifacts(&job.id, result.artifacts);
     ctx.table.replay(&job.id, result.logs);
@@ -108,11 +110,11 @@ impl Run {
         self.ctx.table.release(&self.key, &self.id);
     }
 
-    async fn ready(&self, cancel: &mut watch::Receiver<bool>) -> Option<Result<(Vec<Artifact>, Slot)>> {
-        let recipe = &self.plan.recipe;
+    async fn ready(&self, cancel: &mut watch::Receiver<bool>) -> Option<Result<(after::Outputs, Slot)>> {
+        let target = &self.plan.target;
         let need = Need {
-            cpu: recipe.cpu.unwrap_or(1),
-            ram_mb: recipe.ram_mb.unwrap_or(0),
+            cpu: target.cpu.unwrap_or(1),
+            ram_mb: target.ram_mb.unwrap_or(0),
             gpu: self.plan.needs_gpu() as u32,
         };
         let work = async {
@@ -125,9 +127,13 @@ impl Run {
         }
     }
 
-    async fn execute(&self, extras: Vec<Artifact>, mut cancel: watch::Receiver<bool>) -> Result<(Exit, Vec<Artifact>)> {
-        let files = Arc::new(inputs(&self.plan.snapshot, extras));
-        let prepare = Workspace::prepare(&self.ctx, &self.plan, &self.id, files.clone());
+    async fn execute(
+        &self,
+        extras: after::Outputs,
+        mut cancel: watch::Receiver<bool>,
+    ) -> Result<(Exit, Vec<Artifact>)> {
+        let files = Arc::new(inputs(&self.plan.snapshot, extras.files));
+        let prepare = Workspace::prepare(&self.ctx, &self.plan, &self.id, files.clone(), Arc::new(extras.linked));
         let mut workspace = tokio::select! {
             workspace = prepare => workspace?,
             _ = cancel.wait_for(|c| *c) => return Ok((Exit::Cancelled, Vec::new())),
@@ -155,24 +161,23 @@ impl Run {
         if exit != Exit::Code(Some(0)) {
             return Ok((exit, Vec::new()));
         }
-        let (store, patterns, target) =
-            (self.ctx.hub.store.clone(), self.plan.recipe.outputs.clone(), dir.to_path_buf());
-        let artifacts = blocking(move || outputs::collect(&*store, &target, &patterns, &files)).await?;
+        let (store, plan, folder) = (self.ctx.hub.store.clone(), self.plan.clone(), dir.to_path_buf());
+        let artifacts = blocking(move || outputs::collect(&*store, &folder, &plan.target, &files)).await?;
         Ok((exit, artifacts))
     }
 
     async fn spec(&self, dir: &Path) -> Result<Spec> {
-        let recipe = &self.plan.recipe;
+        let target = &self.plan.target;
         let screenshots = dir.join(folder::SCREENSHOTS);
         let mut env = vec![
             ("ORRIN_JOB".to_string(), self.id.as_str().into()),
-            ("ORRIN_RECIPE".to_string(), self.plan.name.clone().into()),
+            ("ORRIN_TARGET".to_string(), self.plan.name.clone().into()),
             ("ORRIN_SCREENSHOTS".to_string(), screenshots.clone().into_os_string()),
         ];
         if let Some(path) = tools::search_path(&self.tools) {
             env.push(("PATH".to_string(), path));
         }
-        let wiring = compiler::wire(&self.ctx, recipe, dir).await?;
+        let wiring = compiler::wire(&self.ctx, target, dir).await?;
         if let Some(note) = wiring.note {
             self.ctx.table.log(&self.id, Stream::System, note);
         }
@@ -181,13 +186,13 @@ impl Run {
             dir,
             screenshots: &screenshots,
             job: self.id.as_str(),
-            recipe: &self.plan.name,
+            target: &self.plan.name,
             args: &self.plan.args,
         };
-        let expanded = placeholders::expand(&tools::command_line(&recipe.command, &self.tools), &values);
+        let expanded = placeholders::expand(&tools::command_line(&target.command, &self.tools), &values);
         let cores = self.ctx.queue.cores();
         let limits =
-            Limits { cpu_percent: recipe.cpu.map(|c| c.saturating_mul(100) / cores), memory_mb: recipe.ram_mb };
+            Limits { cpu_percent: target.cpu.map(|c| c.saturating_mul(100) / cores), memory_mb: target.ram_mb };
         Ok(Spec {
             command: expanded.command,
             args: if expanded.took_args { Vec::new() } else { self.plan.args.clone() },
@@ -216,7 +221,7 @@ impl Run {
                 });
                 if ok {
                     let (ctx, plan, tools) = (self.ctx.clone(), self.plan.clone(), self.tools.clone());
-                    tokio::spawn(async move { tools::learn(&ctx.hub, &plan.recipe.command, &tools).await });
+                    tokio::spawn(async move { tools::learn(&ctx.hub, &plan.target.command, &tools).await });
                 }
             }
             Err(err) => {
@@ -241,6 +246,9 @@ impl Run {
         self.ctx.table.set_artifacts(&self.id, artifacts);
         if ok && self.plan.cacheable() {
             self.ctx.cache.put(&self.key, &hash)?;
+        }
+        if ok {
+            publish::publish(&self.ctx, &self.plan, &result.artifacts);
         }
         Ok(hash)
     }

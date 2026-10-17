@@ -7,7 +7,7 @@ use crate::api::*;
 use crate::clock::Clock;
 use crate::error::{Error, Result};
 use crate::id::{ChangeId, Hash, PcId, ProjectId, SnapshotId, ViewId};
-use crate::model::{Change, Job, JobKind, Pc, PcSettings, Project, ProjectSettings, Tool, View};
+use crate::model::{Change, Job, JobKind, Linked, Pc, PcSettings, Project, ProjectSettings, Tool, View};
 use crate::service::{Builds, Edits, Facts, GcReport, Git, Index, Landing, Materialise, Peers, Projects, Service, Store, Views};
 
 #[derive(Clone, Copy, Debug)]
@@ -68,6 +68,7 @@ impl Views for Unavailable {
     async fn capture(&self, _: &ViewId) -> Result<Edits> { self.err() }
     async fn advance(&self, _: &ViewId, _: &SnapshotId) -> Result<Vec<String>> { self.err() }
     async fn landed(&self, _: &ViewId, _: &ChangeId) -> Result<()> { self.err() }
+    async fn link(&self, _: &ProjectId, _: Linked) -> Result<()> { Ok(()) }
 }
 
 #[async_trait]
@@ -105,6 +106,7 @@ impl Builds for Unavailable {
     async fn cancel(&self, _: JobRef) -> Result<Job> { self.err() }
     async fn list(&self, _: JobList) -> Result<JobListOutput> { self.err() }
     async fn roots(&self) -> Result<Vec<Hash>> { Ok(Vec::new()) }
+    async fn linked(&self, _: &ProjectId) -> Result<Vec<Linked>> { Ok(Vec::new()) }
 }
 
 #[async_trait]

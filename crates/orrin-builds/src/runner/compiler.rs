@@ -2,7 +2,7 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use orrin_core::Result;
-use orrin_core::model::{CompilerCache, Recipe};
+use orrin_core::model::{CompilerCache, Target};
 
 use crate::context::Context;
 use crate::tools;
@@ -14,20 +14,18 @@ pub struct Wiring {
     pub note: Option<String>,
 }
 
-pub async fn wire(ctx: &Context, recipe: &Recipe, dir: &Path) -> Result<Wiring> {
+pub async fn wire(ctx: &Context, target: &Target, dir: &Path) -> Result<Wiring> {
     let wired = |env| Ok(Wiring { env, note: None });
-    let (name, launcher): (&str, fn(Launch) -> Env) = match recipe.cache {
+    let (name, launcher): (&str, fn(Launch) -> Env) = match target.cache {
         CompilerCache::None => return wired(Vec::new()),
-        CompilerCache::Scons => return wired(scons(&ctx.home.dir("caches/scons")?)),
-        CompilerCache::Sccache => ("sccache", sccache),
-        CompilerCache::Ccache => ("ccache", ccache),
+        CompilerCache::Orrin | CompilerCache::Sccache => ("sccache", sccache),
     };
     let Some(tool) = tools::find(&ctx.hub, name).await else {
         let note = format!("{name} is not installed on this PC; building without a compiler cache");
         return Ok(Wiring { env: Vec::new(), note: Some(note) });
     };
     let cache = ctx.home.dir(&format!("caches/{name}"))?;
-    wired(launcher(Launch { tool, cache, dir: dir.to_path_buf(), warm: recipe.warm.pool(1).is_some() }))
+    wired(launcher(Launch { tool, cache, dir: dir.to_path_buf(), warm: target.warm.pool(1).is_some() }))
 }
 
 pub struct Launch {
@@ -46,18 +44,6 @@ fn sccache(launch: Launch) -> Env {
         env.push(var("CARGO_INCREMENTAL", "0"));
     }
     env
-}
-
-fn ccache(launch: Launch) -> Env {
-    let mut env = launchers(&launch.tool);
-    env.push(var("CCACHE_DIR", &launch.cache));
-    env.push(var("CCACHE_BASEDIR", &launch.dir));
-    env.push(var("CCACHE_NOHASHDIR", "1"));
-    env
-}
-
-fn scons(cache: &Path) -> Env {
-    vec![var("ORRIN_SCONS_CACHE", cache)]
 }
 
 fn launchers(tool: &Path) -> Env {
@@ -95,7 +81,5 @@ mod tests {
         assert_eq!(get(&env, "SCCACHE_BASEDIRS").unwrap(), "/home/runs/job");
         assert_eq!(get(&env, "CARGO_INCREMENTAL").unwrap(), "0");
         assert!(get(&sccache(launch(true)), "CARGO_INCREMENTAL").is_none());
-        assert_eq!(get(&ccache(launch(false)), "CCACHE_BASEDIR").unwrap(), "/home/runs/job");
-        assert_eq!(get(&scons(Path::new("/c")), "ORRIN_SCONS_CACHE").unwrap(), "/c");
     }
 }

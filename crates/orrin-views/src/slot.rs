@@ -1,10 +1,11 @@
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use notify::RecommendedWatcher;
 use orrin_core::model::{View, ViewKind, ViewState};
 use orrin_core::service::Edits;
-use orrin_core::{Millis, ProjectId, ViewId};
+use orrin_core::{Millis, ProjectId, SnapshotId, ViewId};
 use serde::{Deserialize, Serialize};
 
 use crate::disk::rules::Rules;
@@ -17,6 +18,8 @@ pub struct ViewRecord {
     pub captured: Edits,
     #[serde(default)]
     pub closed_at: Option<Millis>,
+    #[serde(default)]
+    pub linked: BTreeMap<String, SnapshotId>,
 }
 
 pub struct Slot {

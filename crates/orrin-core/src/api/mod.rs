@@ -97,7 +97,7 @@ mod tests {
         let ok: Read = serde_json::from_str(r#"{"project":"p_1","path":"a.txt"}"#).unwrap();
         assert_eq!(ok.path, "a.txt");
         assert!(serde_json::from_str::<Read>(r#"{"project":"p_1","path":"a","x":1}"#).is_err());
-        assert!(serde_json::from_str::<Build>(r#"{"project":"p_1","recipe":"r","x":1}"#).is_err());
+        assert!(serde_json::from_str::<Build>(r#"{"project":"p_1","target":"r","x":1}"#).is_err());
         assert!(serde_json::from_str::<ProjectsList>("{}").is_ok());
     }
 

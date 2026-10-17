@@ -1,5 +1,5 @@
 use std::cmp::Reverse;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -114,9 +114,9 @@ impl Lease {
         self.number
     }
 
-    pub fn sync(&mut self, store: &dyn Store, files: &[Entry]) -> Result<Synced> {
+    pub fn sync(&mut self, store: &dyn Store, files: &[Entry], linked: &HashSet<String>) -> Result<Synced> {
         self.state.built = None;
-        let synced = sync::sync(store, &self.dir, files, &mut self.state.files);
+        let synced = sync::sync(store, &self.dir, files, linked, &mut self.state.files);
         self.state.save(&self.dir)?;
         synced
     }

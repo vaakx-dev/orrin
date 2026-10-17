@@ -10,6 +10,7 @@ pub fn collect(ctx: &Context) -> Vec<Hash> {
     let mut results = ctx.cache.results();
     results.extend(jobs.iter().filter_map(|job| job.result.clone()));
     let mut roots: Vec<Hash> = jobs.into_iter().map(|job| job.snapshot).collect();
+    roots.extend(ctx.links.roots());
     for result in results {
         roots.extend(artifacts(store, &result));
         roots.push(result);

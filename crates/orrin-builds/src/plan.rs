@@ -1,65 +1,62 @@
-use std::collections::BTreeMap;
+use std::sync::Arc;
 
-use orrin_core::model::{Job, JobKind, JobState, Recipe, Snapshot};
+use orrin_core::model::{Job, JobKind, JobState, Manifest, Snapshot, Target};
 use orrin_core::service::Store;
-use orrin_core::{Error, JobId, PcId, ProjectId, Result, SnapshotId, now_ms};
+use orrin_core::{JobId, PcId, ProjectId, Result, SnapshotId, now_ms};
 
-use crate::recipe;
+use crate::manifest;
 
 pub struct Plan {
     pub kind: JobKind,
     pub project: ProjectId,
     pub snapshot_id: SnapshotId,
     pub snapshot: Snapshot,
-    pub recipes: BTreeMap<String, Recipe>,
+    pub manifest: Arc<Manifest>,
     pub name: String,
-    pub recipe: Recipe,
+    pub target: Target,
     pub args: Vec<String>,
 }
 
-pub struct Target {
+pub struct Request {
     pub kind: JobKind,
     pub project: ProjectId,
     pub snapshot_id: SnapshotId,
     pub snapshot: Snapshot,
-    pub recipe: String,
+    pub target: String,
     pub args: Vec<String>,
 }
 
 impl Plan {
-    pub fn load(store: &dyn Store, target: Target) -> Result<Self> {
-        let recipes = recipe::load_all(store, &target.snapshot)?;
-        Self::with(recipes, target)
+    pub fn load(store: &dyn Store, request: Request) -> Result<Self> {
+        let manifest = manifest::load(store, &request.snapshot)?;
+        Self::with(Arc::new(manifest), request)
     }
 
-    fn with(recipes: BTreeMap<String, Recipe>, target: Target) -> Result<Self> {
-        recipe::check_after(&recipes, &target.recipe)?;
-        let recipe = recipes
-            .get(&target.recipe)
-            .cloned()
-            .ok_or_else(|| Error::not_found(format!("no recipe {}", target.recipe)))?;
+    fn with(manifest: Arc<Manifest>, request: Request) -> Result<Self> {
+        manifest::check_after(&manifest, &request.target)?;
+        let target = manifest::target(&manifest, &request.target)?.clone();
         Ok(Self {
-            kind: target.kind,
-            project: target.project,
-            snapshot_id: target.snapshot_id,
-            snapshot: target.snapshot,
-            recipes,
-            name: target.recipe,
-            recipe,
-            args: target.args,
+            kind: target.kind.unwrap_or(request.kind),
+            project: request.project,
+            snapshot_id: request.snapshot_id,
+            snapshot: request.snapshot,
+            manifest,
+            name: request.target,
+            target,
+            args: request.args,
         })
     }
 
     pub fn sibling(&self, name: &str) -> Result<Self> {
-        let target = Target {
+        let request = Request {
             kind: JobKind::Build,
             project: self.project.clone(),
             snapshot_id: self.snapshot_id.clone(),
             snapshot: self.snapshot.clone(),
-            recipe: name.to_string(),
+            target: name.to_string(),
             args: Vec::new(),
         };
-        Self::with(self.recipes.clone(), target)
+        Self::with(self.manifest.clone(), request)
     }
 
     pub fn cacheable(&self) -> bool {
@@ -67,11 +64,11 @@ impl Plan {
     }
 
     pub fn needs_gpu(&self) -> bool {
-        self.recipe.gpu || self.recipe.needs.iter().any(|n| n == "gpu")
+        self.target.gpu || self.target.needs.iter().any(|n| n == "gpu")
     }
 
     pub fn tools(&self) -> Vec<String> {
-        tool_names(&self.recipe)
+        tool_names(&self.target)
     }
 
     pub fn job(&self, pc: PcId) -> Job {
@@ -79,7 +76,7 @@ impl Plan {
             id: JobId::new(),
             project: self.project.clone(),
             kind: self.kind,
-            recipe: self.name.clone(),
+            target: self.name.clone(),
             snapshot: self.snapshot_id.clone(),
             pc,
             state: JobState::Queued,
@@ -94,6 +91,6 @@ impl Plan {
     }
 }
 
-pub fn tool_names(recipe: &Recipe) -> Vec<String> {
-    recipe.needs.iter().filter(|n| *n != "gpu").cloned().collect()
+pub fn tool_names(target: &Target) -> Vec<String> {
+    target.needs.iter().filter(|n| *n != "gpu").cloned().collect()
 }

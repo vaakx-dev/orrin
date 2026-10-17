@@ -5,7 +5,7 @@ use std::path::Path;
 use orrin_core::Result;
 use orrin_core::par::par_map;
 
-use crate::recipe;
+use crate::paths;
 use crate::runner::folder::SCREENSHOTS;
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -15,8 +15,8 @@ pub struct Carried {
 }
 
 pub fn carry(from: &Path, to: &Path, patterns: &[String], skip: &HashSet<&str>) -> Result<Carried> {
-    let globs = recipe::globs(patterns)?;
-    let paths: Vec<String> = recipe::walk(from, patterns)
+    let globs = paths::globs(patterns)?;
+    let paths: Vec<String> = paths::walk(from, patterns)
         .into_iter()
         .filter(|path| globs.is_match(path) && !skip.contains(path.as_str()) && !path.starts_with(SCREENSHOTS))
         .collect();

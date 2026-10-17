@@ -17,9 +17,15 @@ pub enum Workspace {
 }
 
 impl Workspace {
-    pub async fn prepare(ctx: &Context, plan: &Plan, id: &JobId, files: Arc<Snapshot>) -> Result<Self> {
+    pub async fn prepare(
+        ctx: &Context,
+        plan: &Plan,
+        id: &JobId,
+        files: Arc<Snapshot>,
+        linked: Arc<HashSet<String>>,
+    ) -> Result<Self> {
         let store = ctx.hub.store.clone();
-        if let Some(size) = plan.recipe.warm.pool(ctx.config.builds.warm_pool) {
+        if let Some(size) = plan.target.warm.pool(ctx.config.builds.warm_pool) {
             let root = warm_root(ctx, plan, &plan.name);
             if ctx.warm.is_full(&root, size as usize) {
                 ctx.table.log(id, Stream::System, format!("waiting for one of {size} warm folders"));
@@ -27,7 +33,7 @@ impl Workspace {
             let mut lease = ctx.warm.lease(&root, &files.entries, size as usize).await;
             let (rewrite, count) = (lease.rewrite, lease.folders);
             let (lease, synced) = blocking(move || {
-                let synced = lease.sync(&*store, &files.entries)?;
+                let synced = lease.sync(&*store, &files.entries, &linked)?;
                 Ok((lease, synced))
             })
             .await?;
@@ -43,7 +49,7 @@ impl Workspace {
         }
         let dir = folder::fresh(&ctx.home.runs(), id)?;
         let (target, big) = (dir.clone(), ctx.config.views.big_file);
-        match blocking(move || folder::fill(&*store, &target, &files.entries, big)).await {
+        match blocking(move || folder::fill(&*store, &target, &files.entries, &linked, big)).await {
             Ok(()) => Ok(Self::Fresh(dir)),
             Err(err) => {
                 Self::Fresh(dir).close();
@@ -53,17 +59,17 @@ impl Workspace {
     }
 
     pub async fn share(&self, ctx: &Context, plan: &Plan, id: &JobId, files: &[Entry]) -> Result<()> {
-        if plan.recipe.share.is_empty() {
+        if plan.target.share.is_empty() {
             return Ok(());
         }
-        for name in &plan.recipe.after {
+        for name in &plan.target.after {
             let key = after::key(ctx, plan, name, &[]).await?;
             let Some(from) = ctx.warm.lease_built(&warm_root(ctx, plan, name), &key) else {
                 let note = format!("share: no idle warm folder of {name} holds this build; nothing carried");
                 ctx.table.log(id, Stream::System, note);
                 continue;
             };
-            let (to, patterns) = (self.dir().to_path_buf(), plan.recipe.share.clone());
+            let (to, patterns) = (self.dir().to_path_buf(), plan.target.share.clone());
             let paths: Vec<String> = files.iter().map(|e| e.path.clone()).collect();
             let carried = blocking(move || {
                 let skip: HashSet<&str> = paths.iter().map(String::as_str).collect();
@@ -96,8 +102,8 @@ impl Workspace {
     }
 }
 
-fn warm_root(ctx: &Context, plan: &Plan, recipe: &str) -> PathBuf {
-    ctx.home.root().join("warm").join(plan.project.as_str()).join(safe(recipe))
+fn warm_root(ctx: &Context, plan: &Plan, target: &str) -> PathBuf {
+    ctx.home.root().join("warm").join(plan.project.as_str()).join(safe(target))
 }
 
 fn safe(name: &str) -> String {

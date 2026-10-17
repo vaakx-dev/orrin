@@ -83,7 +83,7 @@ mod tests {
             id: JobId::new(),
             project: ProjectId::new(),
             kind: JobKind::Build,
-            recipe: "app".into(),
+            target: "app".into(),
             snapshot: SnapshotId::of(b"snap"),
             pc: pc.clone(),
             state,

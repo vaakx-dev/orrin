@@ -22,3 +22,28 @@ needs = ["cargo"]
 cpu = 12
 warm = true
 cache = "sccache"
+
+[targets.check]
+inputs = ["Cargo.toml", "Cargo.lock", "rustfmt.toml", "crates/**"]
+command = "cargo clippy --workspace --all-targets -- -D warnings"
+needs = ["cargo"]
+cpu = 12
+warm = true
+cache = "sccache"
+
+[targets.test]
+inputs = ["Cargo.toml", "Cargo.lock", "crates/**"]
+command = "cargo test {args}"
+needs = ["cargo"]
+cpu = 12
+warm = true
+cache = "sccache"
+
+[targets.release]
+inputs = ["Cargo.toml", "Cargo.lock", "crates/**"]
+command = "cargo build --release"
+outputs = ["target/release/orrin.exe"]
+needs = ["cargo"]
+cpu = 12
+warm = true
+cache = "sccache"

@@ -1,12 +1,12 @@
-use orrin_core::model::{Recipe, Snapshot, Tool};
+use orrin_core::model::{Snapshot, Target, Tool};
 use orrin_core::{Hash, Result};
 use serde::Serialize;
 
-use crate::recipe;
+use crate::manifest;
 
 pub struct Action<'a> {
     pub name: &'a str,
-    pub recipe: &'a Recipe,
+    pub target: &'a Target,
     pub args: &'a [String],
     pub snapshot: &'a Snapshot,
     pub tools: &'a [(String, Option<Tool>)],
@@ -18,7 +18,7 @@ struct KeyParts<'a> {
     os: &'static str,
     arch: &'static str,
     name: &'a str,
-    recipe: &'a Recipe,
+    target: &'a Target,
     args: &'a [String],
     inputs: Vec<(&'a str, &'a Hash)>,
     tools: Vec<(&'a str, Option<&'a str>)>,
@@ -30,9 +30,9 @@ pub fn action(action: Action) -> Result<Hash> {
         os: std::env::consts::OS,
         arch: std::env::consts::ARCH,
         name: action.name,
-        recipe: action.recipe,
+        target: action.target,
         args: action.args,
-        inputs: recipe::inputs(action.recipe, action.snapshot)?
+        inputs: manifest::inputs(action.target, action.snapshot)?
             .into_iter()
             .map(|e| (e.path.as_str(), &e.hash))
             .collect(),
@@ -42,7 +42,7 @@ pub fn action(action: Action) -> Result<Hash> {
     Ok(Hash::of(&serde_json::to_vec(&parts)?))
 }
 
-fn tool_identity(tool: &Tool) -> &str {
+pub fn tool_identity(tool: &Tool) -> &str {
     tool.version.as_deref().unwrap_or(&tool.path)
 }
 
@@ -62,18 +62,18 @@ mod tests {
         Snapshot::new(vec![entry("src/a.c", text), entry("README.md", "readme")])
     }
 
-    fn key(recipe: &Recipe, snapshot: &Snapshot, after: &[Hash]) -> Hash {
-        action(Action { name: "app", recipe, args: &[], snapshot, tools: &[], after }).unwrap()
+    fn key(target: &Target, snapshot: &Snapshot, after: &[Hash]) -> Hash {
+        action(Action { name: "app", target, args: &[], snapshot, tools: &[], after }).unwrap()
     }
 
     #[test]
     fn key_follows_inputs_and_after_not_other_files() {
-        let recipe = Recipe { inputs: vec!["src/**".into()], command: "cc".into(), ..Default::default() };
-        let a = key(&recipe, &snapshot("one"), &[]);
-        assert_ne!(a, key(&recipe, &snapshot("two"), &[]));
+        let target = Target { inputs: vec!["src/**".into()], command: "cc".into(), ..Default::default() };
+        let a = key(&target, &snapshot("one"), &[]);
+        assert_ne!(a, key(&target, &snapshot("two"), &[]));
         let mut other = snapshot("one");
         other.entries.retain(|e| e.path != "README.md");
-        assert_eq!(a, key(&recipe, &other, &[]));
-        assert_ne!(a, key(&recipe, &other, &[Hash::of(b"lib")]));
+        assert_eq!(a, key(&target, &other, &[]));
+        assert_ne!(a, key(&target, &other, &[Hash::of(b"lib")]));
     }
 }

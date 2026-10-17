@@ -4,7 +4,7 @@ use std::sync::Mutex;
 
 use async_trait::async_trait;
 use orrin_core::api::*;
-use orrin_core::model::{View, ViewState};
+use orrin_core::model::{Linked, View, ViewState};
 use orrin_core::service::{Edits, Service, Views};
 use orrin_core::{ChangeId, Error, ProjectId, Result, SnapshotId, ViewId};
 
@@ -104,6 +104,10 @@ impl Views for FakeViews {
         let (view, _) = views.get_mut(id).ok_or_else(|| Error::not_found(id.to_string()))?;
         view.state = ViewState::Landed;
         view.landed = Some(change.clone());
+        Ok(())
+    }
+
+    async fn link(&self, _: &ProjectId, _: Linked) -> Result<()> {
         Ok(())
     }
 }

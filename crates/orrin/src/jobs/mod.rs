@@ -11,14 +11,14 @@ use crate::exit::Outcome;
 use crate::projects::pc_names;
 
 pub async fn submit(api: &Api, kind: JobKind, args: &JobArgs) -> anyhow::Result<Outcome> {
-    let (project, recipe) = args.scoped.split();
+    let (project, name) = args.scoped.split();
     let target = api.target(project, args.scoped.view.as_deref()).await?;
     let pc = match &args.pc {
         Some(name) => Some(api.pc(name).await?),
         None => None,
     };
     let input =
-        JobInput { project: target.project.id, view: target.view, recipe: recipe.into(), args: args.args.clone(), pc };
+        JobInput { project: target.project.id, view: target.view, target: name.into(), args: args.args.clone(), pc };
     let job = send(api, kind, input).await?;
     if args.follow {
         if !api.json {

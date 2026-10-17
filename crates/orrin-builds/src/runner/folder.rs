@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use orrin_core::model::{Entry, Mode, clean_path};
@@ -16,9 +17,10 @@ pub fn fresh(runs: &Path, id: &JobId) -> Result<PathBuf> {
     Ok(dir)
 }
 
-pub fn fill(store: &dyn Store, dir: &Path, files: &[Entry], big: u64) -> Result<()> {
+pub fn fill(store: &dyn Store, dir: &Path, files: &[Entry], linked: &HashSet<String>, big: u64) -> Result<()> {
     let placed = par_map(files, |entry| {
-        let how = if entry.size > big && entry.shareable() { Materialise::Link } else { Materialise::Copy };
+        let shared = linked.contains(&entry.path) || (entry.size > big && entry.shareable());
+        let how = if shared { Materialise::Link } else { Materialise::Copy };
         write(store, dir, entry, how).map(drop)
     });
     placed.into_iter().collect()

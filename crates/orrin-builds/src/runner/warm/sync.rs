@@ -68,7 +68,13 @@ pub fn state_path(dir: &Path) -> PathBuf {
     dir.with_extension("json")
 }
 
-pub fn sync(store: &dyn Store, dir: &Path, files: &[Entry], state: &mut Files) -> Result<Synced> {
+pub fn sync(
+    store: &dyn Store,
+    dir: &Path,
+    files: &[Entry],
+    linked: &HashSet<String>,
+    state: &mut Files,
+) -> Result<Synced> {
     std::fs::create_dir_all(dir)?;
     let wanted: HashSet<&str> = files.iter().map(|e| e.path.as_str()).collect();
     let gone: Vec<String> = state.keys().filter(|path| !wanted.contains(path.as_str())).cloned().collect();
@@ -80,7 +86,8 @@ pub fn sync(store: &dyn Store, dir: &Path, files: &[Entry], state: &mut Files) -
     let fresh = par_map(files, |entry| state.get(&entry.path).is_some_and(|seen| unchanged(dir, entry, seen)));
     let stale: Vec<&Entry> = files.iter().zip(&fresh).filter(|(_, kept)| !**kept).map(|(e, _)| e).collect();
     let written = par_map(&stale, |entry| -> Result<(String, Seen)> {
-        let target = folder::write(store, dir, entry, Materialise::Copy)?;
+        let how = if linked.contains(&entry.path) { Materialise::Link } else { Materialise::Copy };
+        let target = folder::write(store, dir, entry, how)?;
         Ok((entry.path.clone(), seen(&target, &entry.hash)?))
     });
     for item in written {
@@ -184,14 +191,15 @@ mod tests {
         let blobs = Blobs::default();
         let mut state = Files::new();
         let first = [blobs.entry("src/a.rs", "a"), blobs.entry("src/b.rs", "b"), blobs.entry("old/c.rs", "c")];
-        assert_eq!(sync(&blobs, &dir, &first, &mut state).unwrap().written, 3);
+        let none = HashSet::new();
+        assert_eq!(sync(&blobs, &dir, &first, &none, &mut state).unwrap().written, 3);
         std::fs::write(dir.join("target.o"), "built").unwrap();
         let kept_at = modified(&dir.join("src/a.rs"));
         std::thread::sleep(std::time::Duration::from_millis(20));
 
         let second = [blobs.entry("src/a.rs", "a"), blobs.entry("src/b.rs", "b2")];
         assert_eq!(State { files: state.clone(), built: None }.rewrite(&second), 2);
-        assert_eq!(sync(&blobs, &dir, &second, &mut state).unwrap(), Synced { written: 1, kept: 1, removed: 1 });
+        assert_eq!(sync(&blobs, &dir, &second, &none, &mut state).unwrap(), Synced { written: 1, kept: 1, removed: 1 });
         assert_eq!(modified(&dir.join("src/a.rs")), kept_at);
         assert_eq!(std::fs::read_to_string(dir.join("src/b.rs")).unwrap(), "b2");
         assert!(!dir.join("old").exists());

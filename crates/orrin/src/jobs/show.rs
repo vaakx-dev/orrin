@@ -11,13 +11,13 @@ pub struct Names {
 }
 
 pub fn jobs(jobs: &[Job], names: &Names) -> String {
-    let mut table = Table::new(&["ID", "KIND", "PROJECT", "RECIPE", "STATE", "PC", "STARTED"]);
+    let mut table = Table::new(&["ID", "KIND", "PROJECT", "TARGET", "STATE", "PC", "STARTED"]);
     for job in jobs.iter().rev() {
         table.row(vec![
             job.id.to_string(),
             kind(job.kind).into(),
             names.projects.get(&job.project).cloned().unwrap_or_else(|| job.project.to_string()),
-            job.recipe.clone(),
+            job.target.clone(),
             state(job),
             names.pcs.get(&job.pc).cloned().unwrap_or_else(|| job.pc.to_string()),
             ago(job.started_at.unwrap_or(job.created_at)),
@@ -27,7 +27,7 @@ pub fn jobs(jobs: &[Job], names: &Names) -> String {
 }
 
 pub fn job(job: &Job) -> String {
-    format!("{}  {} {}  {}", job.id, kind(job.kind), job.recipe, state(job))
+    format!("{}  {} {}  {}", job.id, kind(job.kind), job.target, state(job))
 }
 
 pub fn state(job: &Job) -> String {
@@ -79,7 +79,7 @@ mod tests {
             id: "j_1".into(),
             project: "p_1".into(),
             kind: JobKind::Build,
-            recipe: "game".into(),
+            target: "game".into(),
             snapshot: Hash::of(b""),
             pc: "pc_1".into(),
             state: JobState::Failed,

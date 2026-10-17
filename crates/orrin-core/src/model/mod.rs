@@ -1,6 +1,8 @@
 mod files;
 mod index;
 mod job;
+mod linked;
+mod manifest;
 mod pc;
 mod project;
 mod share;
@@ -10,6 +12,8 @@ mod view;
 pub use files::*;
 pub use index::*;
 pub use job::*;
+pub use linked::*;
+pub use manifest::*;
 pub use pc::*;
 pub use project::*;
 pub use share::*;

@@ -1,5 +1,5 @@
 use std::cmp::Reverse;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use orrin_core::api::{ProjectOpened, ProjectsImport, ViewCreate};
@@ -70,11 +70,14 @@ impl Inner {
             created_at: now_ms(),
             landed: None,
         };
-        self.open_view(view, folder.stats, true).await
+        let view = self.open_view(view, folder.stats, true).await?;
+        self.link_latest(&view.id).await;
+        Ok(view)
     }
 
     async fn open_view(&self, view: View, stats: Stats, clean: bool) -> Result<View> {
-        let record = ViewRecord { view: view.clone(), captured: Edits::new(), closed_at: None };
+        let record =
+            ViewRecord { view: view.clone(), captured: Edits::new(), closed_at: None, linked: BTreeMap::new() };
         self.save(&record)?;
         let slot = Slot::new(record, stats);
         self.save_stats(&slot)?;

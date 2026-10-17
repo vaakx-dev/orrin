@@ -1,17 +1,17 @@
 use std::path::Path;
 
 use orrin_core::Result;
-use orrin_core::model::{Artifact, Snapshot};
+use orrin_core::model::{Artifact, Snapshot, Target};
 use orrin_core::service::Store;
 
 use super::folder::SCREENSHOTS;
-use crate::recipe;
+use crate::paths as files;
 
-pub fn collect(store: &dyn Store, dir: &Path, patterns: &[String], snapshot: &Snapshot) -> Result<Vec<Artifact>> {
-    let globs = recipe::globs(patterns)?;
-    let mut paths = recipe::walk(dir, patterns);
-    paths.retain(|path| globs.is_match(path));
-    paths.extend(recipe::walk(dir, &[format!("{SCREENSHOTS}/**")]));
+pub fn collect(store: &dyn Store, dir: &Path, target: &Target, snapshot: &Snapshot) -> Result<Vec<Artifact>> {
+    let (globs, scratch) = (files::globs(&target.outputs)?, files::globs(&target.scratch)?);
+    let mut paths = files::walk(dir, &target.outputs);
+    paths.retain(|path| globs.is_match(path) && !scratch.is_match(path));
+    paths.extend(files::walk(dir, &[format!("{SCREENSHOTS}/**")]));
     let mut artifacts = Vec::new();
     for path in paths {
         let file = dir.join(&path);
