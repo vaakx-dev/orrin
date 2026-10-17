@@ -40,7 +40,7 @@ pub fn encode(grams: &[u32]) -> Vec<u8> {
 }
 
 pub fn decode(bytes: &[u8]) -> Vec<u32> {
-    bytes.chunks_exact(3).map(|c| u32::from_le_bytes([c[0], c[1], c[2], 0])).collect()
+    bytes.as_chunks::<3>().0.iter().map(|[a, b, c]| u32::from_le_bytes([*a, *b, *c, 0])).collect()
 }
 
 fn pack(w: &[u8]) -> u32 {
