@@ -2,8 +2,8 @@ use std::collections::BTreeMap;
 
 use orrin_core::api::{JobInput, JobLogs, JobRef};
 use orrin_core::model::{Entry, Job, JobKind, JobState, MANIFEST_PATH, Manifest, PackageBuild, Snapshot, Target};
-use orrin_core::service::Services;
-use orrin_core::{Error, ProjectId, Result, SnapshotId};
+use orrin_core::service::{PackageNeed, Services};
+use orrin_core::{Error, Result, SnapshotId};
 
 const PAGE: u32 = 1000;
 const WAIT_MS: u64 = 25_000;
@@ -13,21 +13,16 @@ pub struct Built {
     pub job: Job,
 }
 
-pub async fn run(
-    hub: &Services,
-    project: &ProjectId,
-    name: &str,
-    source: &SnapshotId,
-    build: &PackageBuild,
-) -> Result<Built> {
+pub async fn run(hub: &Services, need: &PackageNeed, source: &SnapshotId, build: &PackageBuild) -> Result<Built> {
+    let name = need.name.as_str();
     let source = hub.store.snapshot(source)?;
     let (snapshot, target) = match build {
         PackageBuild::Target(target) => (source, target.clone()),
-        PackageBuild::Inline(inline) => (overlay(hub, source, name, inline)?, name.to_string()),
+        PackageBuild::Inline(inline) => (overlay(hub, source, need, inline)?, name.to_string()),
     };
     let id = hub.store.put_snapshot(&snapshot)?;
-    let input =
-        JobInput { project: project.clone(), view: None, snapshot: Some(id), target, args: Vec::new(), pc: None };
+    let project = need.project.clone();
+    let input = JobInput { project, view: None, snapshot: Some(id), target, args: Vec::new(), pc: None };
     let job = finished(hub, hub.builds.submit(JobKind::Build, input).await?).await?;
     if job.state != JobState::Succeeded {
         let why = job.error.clone().unwrap_or_else(|| format!("{:?}", job.state).to_lowercase());
@@ -44,8 +39,13 @@ pub async fn run(
     Ok(Built { snapshot, job })
 }
 
-fn overlay(hub: &Services, source: Snapshot, name: &str, inline: &Target) -> Result<Snapshot> {
-    let manifest = Manifest { targets: BTreeMap::from([(name.to_string(), inline.clone())]), ..Default::default() };
+fn overlay(hub: &Services, source: Snapshot, need: &PackageNeed, inline: &Target) -> Result<Snapshot> {
+    let name = need.name.as_str();
+    let manifest = Manifest {
+        targets: BTreeMap::from([(name.to_string(), inline.clone())]),
+        rules: need.rules.clone(),
+        ..Default::default()
+    };
     let manifest =
         toml::to_string(&manifest).map_err(|err| Error::invalid(format!("package {name}: bad build table: {err}")))?;
     let entry = Entry {

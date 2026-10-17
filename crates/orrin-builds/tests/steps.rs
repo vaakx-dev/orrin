@@ -1,5 +1,6 @@
 mod fakes;
 
+use std::path::PathBuf;
 use std::time::SystemTime;
 
 use orrin_core::JobId;
@@ -11,10 +12,10 @@ use fakes::{World, world};
 
 #[cfg(windows)]
 const RULES: &str = "[rules.cc]\ncommand = 'type {in} & copy /y {in} {out} > nul'\ndeps = 'msvc'\noutput = 'obj/{name}.o'\n\
-     [rules.link]\ncommand = 'type {in} > {out} 2> nul'\n";
+     [rules.link]\ncommand = 'type {in} > {out} 2> nul & echo map> {out.path}.map'\noutputs = ['{out.path}.map']\n";
 #[cfg(not(windows))]
 const RULES: &str = "[rules.cc]\ncommand = 'cat {in}; cp {in} {out}'\ndeps = 'msvc'\noutput = 'obj/{name}.o'\n\
-     [rules.link]\ncommand = 'cat {in} > {out}'\n";
+     [rules.link]\ncommand = 'cat {in} > {out}; echo map > {out.path}.map'\noutputs = ['{out.path}.map']\n";
 
 fn manifest() -> String {
     let steps = "steps = [{ rule = 'cc', files = '*.c' }, { rule = 'link', in = '@previous', out = 'app.out' }]";
@@ -44,9 +45,12 @@ async fn build(w: &World, target: &str) -> (JobId, Vec<String>, String) {
     (job.id, logs, out)
 }
 
+fn warm(w: &World) -> PathBuf {
+    w.home.root().join("warm").join(w.project.as_str()).join("app").join("0")
+}
+
 fn modified(w: &World, path: &str) -> SystemTime {
-    let folder = w.home.root().join("warm").join(w.project.as_str()).join("app").join("0");
-    std::fs::metadata(folder.join(path)).unwrap().modified().unwrap()
+    std::fs::metadata(warm(w).join(path)).unwrap().modified().unwrap()
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -58,9 +62,11 @@ async fn header_change_reruns_only_the_steps_that_include_it() {
     assert!(logs.contains(&"link: 1 ran, 0 reused".to_string()), "{logs:?}");
     assert!(out.contains("a.h") && out.contains("b.h"), "{out}");
     let untouched = modified(&w, "obj/b.o");
+    std::fs::remove_file(warm(&w).join("app.map")).unwrap();
 
     w.change(&files(&manifest, "a2"));
     let (_, logs, _) = build(&w, "app").await;
+    assert!(warm(&w).join("app.map").is_file(), "the link's second output comes back with the set");
     assert!(logs.contains(&"cc: 1 ran, 1 reused".to_string()), "{logs:?}");
     assert!(logs.contains(&"[cc] a.c".to_string()) && !logs.contains(&"[cc] b.c".to_string()), "{logs:?}");
     assert!(logs.contains(&"link: 0 ran, 1 reused".to_string()), "same object, so no relink: {logs:?}");

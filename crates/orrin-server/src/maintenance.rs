@@ -36,6 +36,8 @@ pub async fn run(hub: &Hub) -> Result<Event> {
         roots.extend(history(hub, &project.id).await?);
     }
     roots.extend(views(hub).await?);
+    let steps = hub.builds.clean().await?;
+    tracing::info!(steps, "old build step records dropped");
     roots.extend(hub.builds.roots().await?);
     let dropped = hub.cache.trim().await?;
     tracing::info!(dropped, "compiler cache trimmed");

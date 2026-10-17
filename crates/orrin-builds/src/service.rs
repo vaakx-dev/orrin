@@ -11,9 +11,11 @@ use crate::context::Context;
 use crate::plan::{Plan, Request};
 use crate::remote::{self, Place};
 use crate::roots;
+use crate::runner::steps::Records;
 use crate::{recover, runner, source};
 
 const CANCEL_WAIT: Duration = Duration::from_secs(5);
+const DAY_SECS: u64 = 24 * 60 * 60;
 const LOG_LIMIT: u32 = 1000;
 const MAX_WAIT: Duration = Duration::from_secs(30);
 
@@ -108,6 +110,12 @@ impl Builds for BuildService {
         let jobs =
             self.ctx.table.jobs().into_iter().filter(|job| input.project.as_ref().is_none_or(|p| *p == job.project));
         Ok(JobListOutput { jobs: jobs.collect() })
+    }
+
+    async fn clean(&self) -> Result<u32> {
+        let records = Records::open(&self.ctx.home)?;
+        let keep = Duration::from_secs(self.ctx.config.builds.keep_days as u64 * DAY_SECS);
+        tokio::task::spawn_blocking(move || records.clean(keep)).await.map_err(|err| Error::internal(err.to_string()))
     }
 
     async fn roots(&self) -> Result<Vec<Hash>> {

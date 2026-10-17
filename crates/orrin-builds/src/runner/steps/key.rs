@@ -10,6 +10,7 @@ pub struct Base<'a> {
     pub tools: &'a [(&'a str, Option<&'a str>)],
     pub inputs: &'a [(&'a str, &'a Hash)],
     pub out: Option<&'a str>,
+    pub also: &'a [String],
 }
 
 #[derive(Serialize)]

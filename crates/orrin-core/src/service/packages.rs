@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use async_trait::async_trait;
@@ -5,7 +6,7 @@ use async_trait::async_trait;
 use crate::api::{PackageFound, SyncPackage};
 use crate::error::Result;
 use crate::id::{Hash, ProjectId, SnapshotId};
-use crate::model::Package;
+use crate::model::{Package, Rule};
 use crate::service::Service;
 
 #[derive(Clone, Debug)]
@@ -13,6 +14,7 @@ pub struct PackageNeed {
     pub project: ProjectId,
     pub name: String,
     pub package: Package,
+    pub rules: BTreeMap<String, Rule>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

@@ -94,7 +94,7 @@ struct Run {
     tools: Tools,
     key: Hash,
     id: JobId,
-    packages: OnceLock<Placed>,
+    packages: OnceLock<Vec<Placed>>,
 }
 
 impl Run {
@@ -172,6 +172,7 @@ impl Run {
                 dir,
                 files: &files,
                 env: &env,
+                packages: self.placed(),
                 parallel: self.plan.cpu(self.ctx.queue.cores()),
                 cancel: cancel.clone(),
             })
@@ -224,7 +225,7 @@ impl Run {
             target: &self.plan.name,
             args: &self.plan.args,
         };
-        let command = packages::expand(&target.command, self.packages.get().unwrap_or(&Vec::new()));
+        let command = packages::expand(&target.command, self.placed());
         let expanded = placeholders::expand(&tools::command_line(&command, &self.tools), &values);
         let cores = self.ctx.queue.cores();
         let limits =
@@ -236,6 +237,10 @@ impl Run {
             env,
             limits,
         }
+    }
+
+    fn placed(&self) -> &[Placed] {
+        self.packages.get().map_or(&[], Vec::as_slice)
     }
 
     async fn finish(&self, outcome: Result<(Exit, Vec<Artifact>)>) {

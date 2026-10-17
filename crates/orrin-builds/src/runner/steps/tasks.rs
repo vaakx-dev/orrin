@@ -10,6 +10,7 @@ use crate::paths;
 pub struct Task {
     pub inputs: Vec<String>,
     pub out: Option<String>,
+    pub also: Vec<String>,
 }
 
 pub fn expand(step: &Step, rule: &Rule, files: &[String], previous: &[String], vars: &Values) -> Result<Vec<Task>> {
@@ -17,7 +18,7 @@ pub fn expand(step: &Step, rule: &Rule, files: &[String], previous: &[String], v
         false => {
             let globs = paths::globs(&step.files)?;
             let matched = files.iter().filter(|path| globs.is_match(path.as_str()));
-            matched.map(|path| Task { inputs: vec![path.clone()], out: output(&rule.output, path, vars) }).collect()
+            matched.map(|path| task(rule, vec![path.clone()], output(&rule.output, path, vars), vars)).collect()
         }
         true => {
             let inputs = gather(&step.input, files, previous)?;
@@ -25,7 +26,7 @@ pub fn expand(step: &Step, rule: &Rule, files: &[String], previous: &[String], v
                 Some(out) => Some(fill(out, vars)),
                 None => inputs.first().and_then(|first| output(&rule.output, first, vars)),
             };
-            vec![Task { inputs, out }]
+            vec![task(rule, inputs, out, vars)]
         }
     };
     let mut seen = HashSet::new();
@@ -44,6 +45,19 @@ pub fn names(path: &str) -> Values {
     [("path", stem), ("name", name.to_string()), ("ext", ext.to_string())]
         .map(|(key, value)| (key.to_string(), value))
         .into()
+}
+
+fn task(rule: &Rule, inputs: Vec<String>, out: Option<String>, vars: &Values) -> Task {
+    let mut values = vars.clone();
+    if let Some(first) = inputs.first() {
+        values.extend(names(first));
+    }
+    if let Some(out) = &out {
+        values.extend(names(out).into_iter().map(|(name, value)| (format!("out.{name}"), value)));
+        values.insert("out".into(), out.clone());
+    }
+    let also = rule.outputs.iter().map(|template| fill(template, &values)).collect();
+    Task { inputs, out, also }
 }
 
 fn output(template: &str, input: &str, vars: &Values) -> Option<String> {
@@ -87,8 +101,10 @@ mod tests {
         assert_eq!(outs, [".build/game/a.obj", ".build/game/x/b.obj"]);
         let link = step("rule = 'dll'\nin = '@previous'\nout = 'bin/{lib}.dll'");
         let vars: Values = [("lib".to_string(), "x".to_string())].into();
-        let linked = expand(&link, &Rule::default(), &files, &outs, &vars).unwrap();
-        assert_eq!(linked, [Task { inputs: outs, out: Some("bin/x.dll".into()) }]);
+        let dll = Rule { outputs: vec!["{out.path}.lib".into(), "{out.path}.pdb".into()], ..Default::default() };
+        let linked = expand(&link, &dll, &files, &outs, &vars).unwrap();
+        let also = vec!["bin/x.lib".to_string(), "bin/x.pdb".to_string()];
+        assert_eq!(linked, [Task { inputs: outs, out: Some("bin/x.dll".into()), also }]);
         let clash = Rule { output: "{name}.obj".into(), ..Default::default() };
         let two: Vec<String> = ["a/x.cpp", "b/x.cpp"].map(String::from).into();
         assert!(expand(&step("rule = 'c'\nfiles = '**/*.cpp'"), &clash, &two, &[], &Values::new()).is_err());

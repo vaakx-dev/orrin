@@ -2950,6 +2950,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "orrin-cache"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "orrin-core",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "walkdir",
+]
+
+[[package]]
 name = "orrin-core"
 version = "0.1.0"
 dependencies = [
@@ -3087,6 +3099,7 @@ dependencies = [
  "base64 0.23.1",
  "futures-util",
  "orrin-builds",
+ "orrin-cache",
  "orrin-core",
  "orrin-facts",
  "orrin-git",

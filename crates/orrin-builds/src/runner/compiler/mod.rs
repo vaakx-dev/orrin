@@ -11,7 +11,9 @@ use crate::tools;
 
 pub type Env = Vec<(String, OsString)>;
 
+#[derive(Default)]
 pub struct Wiring {
+    pub tool: Option<PathBuf>,
     pub env: Env,
     pub note: Option<String>,
 }
@@ -19,37 +21,44 @@ pub struct Wiring {
 const SCCACHE: &str = "sccache";
 
 pub async fn wire(ctx: &Context, target: &Target, dir: &Path) -> Result<Wiring> {
-    let unwired = |note| Ok(Wiring { env: Vec::new(), note: Some(note) });
-    if target.cache == CompilerCache::None {
-        return Ok(Wiring { env: Vec::new(), note: None });
+    let mut wiring = backend(ctx, target.cache, dir).await?;
+    if let Some(tool) = &wiring.tool {
+        wiring.env = sccache(tool, std::mem::take(&mut wiring.env), target.warm.pool(1).is_some());
+    }
+    Ok(wiring)
+}
+
+pub async fn backend(ctx: &Context, cache: CompilerCache, dir: &Path) -> Result<Wiring> {
+    let unwired = |note| Ok(Wiring { note: Some(note), ..Default::default() });
+    if cache == CompilerCache::None {
+        return Ok(Wiring::default());
     }
     let Some(tool) = tools::find(&ctx.hub, SCCACHE).await else {
         return unwired(format!("{SCCACHE} is not installed on this PC; building without a compiler cache"));
     };
-    let backend = match target.cache {
+    let mut env = match cache {
         CompilerCache::Orrin => match orrin::backend(&ctx.home, &tool).await {
             Ok(env) => env,
             Err(err) => return unwired(format!("the Orrin compiler cache is unreachable ({err}); not caching")),
         },
         _ => vec![var("SCCACHE_DIR", ctx.home.dir(&format!("caches/{SCCACHE}"))?)],
     };
-    let env = sccache(Launch { tool, backend, dir: dir.to_path_buf(), warm: target.warm.pool(1).is_some() });
-    Ok(Wiring { env, note: None })
+    env.push(var("SCCACHE_BASEDIRS", dir));
+    Ok(Wiring { tool: Some(tool), env, note: None })
 }
 
-pub struct Launch {
-    pub tool: PathBuf,
-    pub backend: Env,
-    pub dir: PathBuf,
-    pub warm: bool,
+pub fn wrap(command: &str, tool: Option<&Path>) -> String {
+    match tool {
+        Some(tool) => format!("\"{}\" {}", tool.display(), command.trim_start()),
+        None => command.to_string(),
+    }
 }
 
-fn sccache(launch: Launch) -> Env {
-    let mut env = launchers(&launch.tool);
-    env.push(var("RUSTC_WRAPPER", &launch.tool));
-    env.extend(launch.backend);
-    env.push(var("SCCACHE_BASEDIRS", &launch.dir));
-    if !launch.warm {
+fn sccache(tool: &Path, backend: Env, warm: bool) -> Env {
+    let mut env = launchers(tool);
+    env.push(var("RUSTC_WRAPPER", tool));
+    env.extend(backend);
+    if !warm {
         env.push(var("CARGO_INCREMENTAL", "0"));
     }
     env
@@ -78,18 +87,19 @@ mod tests {
 
     #[test]
     fn sccache_wraps_rustc_and_shares_the_pc_cache() {
-        let launch = |warm| Launch {
-            tool: PathBuf::from("/bin/sccache"),
-            backend: vec![var("SCCACHE_DIR", "/home/caches/sccache")],
-            dir: PathBuf::from("/home/runs/job"),
-            warm,
-        };
-        let env = sccache(launch(false));
+        let tool = Path::new("/bin/sccache");
+        let backend = || vec![var("SCCACHE_DIR", "/home/caches/sccache")];
+        let env = sccache(tool, backend(), false);
         assert_eq!(get(&env, "RUSTC_WRAPPER").unwrap(), "/bin/sccache");
         assert_eq!(get(&env, "ORRIN_COMPILER_LAUNCHER").unwrap(), "/bin/sccache");
         assert_eq!(get(&env, "SCCACHE_DIR").unwrap(), "/home/caches/sccache");
-        assert_eq!(get(&env, "SCCACHE_BASEDIRS").unwrap(), "/home/runs/job");
         assert_eq!(get(&env, "CARGO_INCREMENTAL").unwrap(), "0");
-        assert!(get(&sccache(launch(true)), "CARGO_INCREMENTAL").is_none());
+        assert!(get(&sccache(tool, backend(), true), "CARGO_INCREMENTAL").is_none());
+    }
+
+    #[test]
+    fn wraps_a_rule_command_with_the_cache() {
+        assert_eq!(wrap(" cl /c a.cpp", Some(Path::new("/bin/sccache"))), "\"/bin/sccache\" cl /c a.cpp");
+        assert_eq!(wrap("cl /c a.cpp", None), "cl /c a.cpp");
     }
 }

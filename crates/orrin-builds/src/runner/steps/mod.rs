@@ -2,6 +2,8 @@ mod deps;
 mod files;
 mod fill;
 mod key;
+mod listing;
+mod prep;
 mod records;
 mod setup;
 mod task;
@@ -11,6 +13,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::future::Future;
 use std::path::Path;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
 use futures_util::{StreamExt, stream};
@@ -20,12 +23,14 @@ use tokio::sync::watch;
 
 pub use records::Records;
 
-use super::compiler::Env;
+use super::compiler::{self, Env, Wiring};
+use super::packages::{self, Placed};
 use crate::context::Context;
 use crate::plan::Plan;
 use crate::process::{self, Exit, Limits};
 use crate::tools::{self, Tools};
 use fill::{Values, fill, native};
+use prep::{Prep, Prepared};
 use task::Done;
 use tasks::Task;
 
@@ -39,6 +44,7 @@ pub struct Build<'a> {
     pub dir: &'a Path,
     pub files: &'a Snapshot,
     pub env: &'a Env,
+    pub packages: &'a [Placed],
     pub parallel: u32,
     pub cancel: watch::Receiver<bool>,
 }
@@ -52,23 +58,13 @@ pub async fn build(build: Build<'_>) -> Result<Built> {
     let records = Records::open(&build.ctx.home)?;
     let mut known: HashMap<String, Hash> =
         build.files.entries.iter().map(|e| (e.path.clone(), e.hash.clone())).collect();
-    let mut setups: HashMap<String, setup::Delta> = HashMap::new();
+    let mut prep = Prep::default();
     let mut previous = Vec::new();
     for step in &build.plan.target.steps {
         let rule = build.plan.manifest.rules.get(&step.rule);
         let rule = rule.ok_or_else(|| Error::not_found(format!("no rule {}", step.rule)))?;
-        let delta = match &rule.setup {
-            Some(line) => match setups.get(line) {
-                Some(delta) => delta.clone(),
-                None => {
-                    let delta = capture(&build, line).await?;
-                    setups.insert(line.clone(), delta.clone());
-                    delta
-                }
-            },
-            None => setup::Delta::new(),
-        };
-        let group = Group::new(&build, &step.rule, rule, &step.vars, delta, &records, &known);
+        let prepared = prep.rule(&build, rule).await?;
+        let group = Group::new(&build, &step.rule, rule, &step.vars, prepared, &records, &known);
         let mut files: Vec<String> = known.keys().cloned().collect();
         files.sort();
         let tasks = tasks::expand(step, rule, &files, &previous, &group.values)?;
@@ -82,15 +78,6 @@ pub async fn build(build: Build<'_>) -> Result<Built> {
     Ok(Built { exit: Exit::Code(Some(0)), outputs: previous })
 }
 
-async fn capture(build: &Build<'_>, line: &str) -> Result<setup::Delta> {
-    let line = tools::command_line(line, build.tools);
-    let (delta, fresh) = setup::capture(&build.ctx.home, &line, build.dir, build.env, build.cancel.clone()).await?;
-    if fresh {
-        build.ctx.table.log(build.id, Stream::System, format!("setup: ran {line}"));
-    }
-    Ok(delta)
-}
-
 struct Group<'a> {
     build: &'a Build<'a>,
     name: &'a str,
@@ -99,6 +86,7 @@ struct Group<'a> {
     key_values: Values,
     env: Env,
     delta: setup::Delta,
+    cache: Arc<Wiring>,
     records: &'a Records,
     known: &'a HashMap<String, Hash>,
 }
@@ -109,7 +97,7 @@ impl<'a> Group<'a> {
         name: &'a str,
         rule: &'a Rule,
         vars: &BTreeMap<String, String>,
-        delta: setup::Delta,
+        prepared: Prepared,
         records: &'a Records,
         known: &'a HashMap<String, Hash>,
     ) -> Self {
@@ -117,14 +105,19 @@ impl<'a> Group<'a> {
         let args = process::join_args(&plan.args);
         let dir = build.dir.to_string_lossy().into_owned();
         let shots = build.dir.join(super::folder::SCREENSHOTS).to_string_lossy().into_owned();
-        let values = with_vars(base(&dir, &shots, build.id.as_str(), &plan.name, &args), vars);
-        let key_values = with_vars(base("<dir>", "<screenshots>", "<job>", &plan.name, &args), vars);
+        let mut values = base(&dir, &shots, build.id.as_str(), &plan.name, &args);
+        values.extend(packages::dirs(build.packages));
+        let mut key_values = base("<dir>", "<screenshots>", "<job>", &plan.name, &args);
+        key_values.extend(packages::stand_ins(build.packages));
+        let (values, key_values) = (with_vars(values, vars), with_vars(key_values, vars));
+        let Prepared { delta, cache } = prepared;
         let mut env = build.env.clone();
         env.extend(delta.iter().map(|(name, value)| (name.clone(), value.into())));
+        env.extend(cache.env.iter().cloned());
         if rule.deps == Deps::Msvc {
             env.push(("VSLANG".into(), "1033".into()));
         }
-        Self { build, name, rule, values, key_values, env, delta, records, known }
+        Self { build, name, rule, values, key_values, env, delta, cache, records, known }
     }
 
     async fn run(&self, tasks: &[Task]) -> Result<Result<Vec<Artifact>, Exit>> {
@@ -163,7 +156,8 @@ impl<'a> Group<'a> {
         values.extend(extra.clone());
         key_values.extend(extra);
         let command = tools::command_line(&self.rule.command, self.build.tools);
-        (fill(&command, &values), fill(&self.rule.command, &key_values))
+        let command = compiler::wrap(&fill(&command, &values), self.cache.tool.as_deref());
+        (command, fill(&self.rule.command, &key_values))
     }
 }
 
@@ -188,7 +182,9 @@ fn task_values(task: &Task) -> Values {
         }));
     }
     values.insert("in".into(), task.inputs.iter().map(|path| native(path)).collect::<Vec<_>>().join(" "));
+    values.insert(listing::NAME.into(), native(&listing::path(task)));
     if let Some(out) = &task.out {
+        values.extend(tasks::names(out).into_iter().map(|(name, value)| (format!("out.{name}"), native(&value))));
         values.insert("out".into(), native(out));
     }
     values

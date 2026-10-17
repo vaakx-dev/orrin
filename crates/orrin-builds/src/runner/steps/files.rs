@@ -4,30 +4,51 @@ use orrin_core::model::{Artifact, Entry, clean_path};
 use orrin_core::service::{Materialise, Store};
 use orrin_core::{Error, Hash, Result};
 
+use crate::paths;
 use crate::runner::folder;
 
 pub fn depfile(out: &str) -> String {
     format!("{out}.d")
 }
 
-pub fn clear(dir: &Path, out: &str) -> Result<()> {
-    let file = inside(dir, out)?;
-    for path in [file.clone(), inside(dir, &depfile(out))?] {
-        if path.exists() {
-            std::fs::remove_file(path)?;
+pub fn clear(dir: &Path, out: Option<&str>, also: &[String]) -> Result<()> {
+    let mut stale = extras(dir, also)?;
+    if let Some(out) = out {
+        stale.extend([out.to_string(), depfile(out)]);
+        if let Some(parent) = inside(dir, out)?.parent() {
+            std::fs::create_dir_all(parent)?;
         }
     }
-    if let Some(parent) = file.parent() {
-        std::fs::create_dir_all(parent)?;
+    for path in stale {
+        let file = inside(dir, &path)?;
+        if file.exists() {
+            std::fs::remove_file(file)?;
+        }
     }
     Ok(())
 }
 
-pub fn keep(store: &dyn Store, dir: &Path, out: Option<&str>) -> Result<Vec<Artifact>> {
-    let Some(out) = out else { return Ok(Vec::new()) };
-    let file = inside(dir, out)?;
-    let meta = std::fs::metadata(&file).map_err(|_| Error::invalid(format!("the step did not write {out}")))?;
-    Ok(vec![Artifact { path: out.to_string(), hash: store.put_file(&file)?, size: meta.len() }])
+pub fn keep(store: &dyn Store, dir: &Path, out: Option<&str>, also: &[String]) -> Result<Vec<Artifact>> {
+    let mut kept = Vec::new();
+    if let Some(out) = out {
+        let file = inside(dir, out)?;
+        let meta = std::fs::metadata(&file).map_err(|_| Error::invalid(format!("the step did not write {out}")))?;
+        kept.push(Artifact { path: out.to_string(), hash: store.put_file(&file)?, size: meta.len() });
+    }
+    for path in extras(dir, also)?.into_iter().filter(|path| Some(path.as_str()) != out) {
+        let file = inside(dir, &path)?;
+        let size = std::fs::metadata(&file)?.len();
+        kept.push(Artifact { hash: store.put_file(&file)?, path, size });
+    }
+    Ok(kept)
+}
+
+fn extras(dir: &Path, also: &[String]) -> Result<Vec<String>> {
+    if also.is_empty() {
+        return Ok(Vec::new());
+    }
+    let globs = paths::globs(also)?;
+    Ok(paths::walk(dir, also).into_iter().filter(|path| globs.is_match(path)).collect())
 }
 
 pub fn place(store: &dyn Store, dir: &Path, outputs: &[Artifact]) -> Result<()> {

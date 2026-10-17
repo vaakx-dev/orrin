@@ -1,10 +1,10 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use orrin_core::api::{PackageFound, SyncPackage, ViewList};
-use orrin_core::model::{PackageBuild, ViewKind, ViewState};
+use orrin_core::model::{PackageBuild, Rule, ViewKind, ViewState};
 use orrin_core::service::{Hub, PackageNeed, PackageReady, Packages, Service, Setup, Store};
 use orrin_core::{Error, Hash, ProjectId, Result, SnapshotId};
 use serde::Serialize;
@@ -33,6 +33,7 @@ struct BuildKey<'a> {
     arch: &'static str,
     source: &'a Hash,
     build: &'a Option<PackageBuild>,
+    rules: &'a BTreeMap<String, Rule>,
 }
 
 impl PackageService {
@@ -64,6 +65,7 @@ impl PackageService {
             arch: std::env::consts::ARCH,
             source: &source_key,
             build: &need.package.build,
+            rules: &need.rules,
         };
         let key = Hash::of(&serde_json::to_vec(&parts)?);
         Ok(Located { source, source_key, snapshot, key })
@@ -126,7 +128,7 @@ impl Packages for PackageService {
         let Some(how) = &need.package.build else {
             return self.ready(key, name, &source, "fetched".into()).await;
         };
-        let built = build::run(&self.hub, &need.project, name, &source, how).await?;
+        let built = build::run(&self.hub, &need, &source, how).await?;
         let note = match built.job.cached {
             true => "built (cached)".to_string(),
             false => format!("built in job {}", built.job.id),

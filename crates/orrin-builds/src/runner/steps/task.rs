@@ -6,7 +6,7 @@ use orrin_core::{Error, Hash, Result};
 
 use super::records::Outcome;
 use super::tasks::Task;
-use super::{Group, deps, files, key};
+use super::{Group, deps, files, key, listing};
 use crate::process::{self, Exit, Limits, Spec};
 use crate::runner::blocking;
 
@@ -41,7 +41,8 @@ impl Group<'_> {
         };
         let deps = self.deps(task, found)?;
         let (store, dir, out) = (self.build.ctx.hub.store.clone(), self.build.dir.to_path_buf(), task.out.clone());
-        let outputs = blocking(move || files::keep(&*store, &dir, out.as_deref())).await?;
+        let also = task.also.clone();
+        let outputs = blocking(move || files::keep(&*store, &dir, out.as_deref(), &also)).await?;
         self.records.put_deps(&base, &deps)?;
         let full = key::full(&base, &self.dep_hashes(deps).await?)?;
         self.records.put_outcome(&full, &Outcome { outputs: outputs.clone() })?;
@@ -63,7 +64,14 @@ impl Group<'_> {
             .iter()
             .map(|(name, tool)| (name.as_str(), tool.as_ref().map(crate::key::tool_identity)))
             .collect();
-        key::base(&key::Base { command, env: &self.delta, tools: &tools, inputs: &inputs, out: task.out.as_deref() })
+        key::base(&key::Base {
+            command,
+            env: &self.delta,
+            tools: &tools,
+            inputs: &inputs,
+            out: task.out.as_deref(),
+            also: &task.also,
+        })
     }
 
     async fn reuse(&self, base: &Hash) -> Result<Option<Vec<Artifact>>> {
@@ -76,6 +84,7 @@ impl Group<'_> {
         }
         let (dir, outputs) = (self.build.dir.to_path_buf(), outcome.outputs.clone());
         blocking(move || files::place(&*store, &dir, &outputs)).await?;
+        self.records.used(base, &full);
         Ok(Some(outcome.outputs))
     }
 
@@ -87,9 +96,11 @@ impl Group<'_> {
             _ => String::new(),
         };
         table.log(id, Stream::System, format!("[{}]{label}", self.name));
-        if let Some(out) = &task.out {
-            files::clear(dir, out)?;
-        }
+        files::clear(dir, task.out.as_deref(), &task.also)?;
+        let listed = match self.rule.command.contains(&format!("{{{}}}", listing::NAME)) {
+            true => Some(listing::write(dir, task)?),
+            false => None,
+        };
         let spec = Spec {
             command: command.to_string(),
             args: Vec::new(),
@@ -107,6 +118,9 @@ impl Group<'_> {
             table.log(id, stream, text);
         })
         .await?;
+        if let Some(file) = listed {
+            let _ = std::fs::remove_file(file);
+        }
         if exit == Exit::Code(Some(0)) {
             return Ok(Ok(found));
         }

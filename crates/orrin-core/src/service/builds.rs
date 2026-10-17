@@ -15,6 +15,7 @@ pub trait Builds: Service {
     async fn artifacts(&self, input: JobRef) -> Result<JobArtifactsOutput>;
     async fn cancel(&self, input: JobRef) -> Result<Job>;
     async fn list(&self, input: JobList) -> Result<JobListOutput>;
+    async fn clean(&self) -> Result<u32>;
     async fn roots(&self) -> Result<Vec<Hash>>;
     async fn linked(&self, project: &ProjectId) -> Result<Vec<Linked>>;
 }

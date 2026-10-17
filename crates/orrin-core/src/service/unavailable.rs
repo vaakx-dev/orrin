@@ -108,6 +108,7 @@ impl Builds for Unavailable {
     async fn artifacts(&self, _: JobRef) -> Result<JobArtifactsOutput> { self.err() }
     async fn cancel(&self, _: JobRef) -> Result<Job> { self.err() }
     async fn list(&self, _: JobList) -> Result<JobListOutput> { self.err() }
+    async fn clean(&self) -> Result<u32> { Ok(0) }
     async fn roots(&self) -> Result<Vec<Hash>> { Ok(Vec::new()) }
     async fn linked(&self, _: &ProjectId) -> Result<Vec<Linked>> { Ok(Vec::new()) }
 }

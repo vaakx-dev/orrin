@@ -30,6 +30,7 @@ pub struct Rule {
     pub command: String,
     pub deps: Deps,
     pub output: String,
+    pub outputs: Vec<String>,
     pub cache: CompilerCache,
 }
 
@@ -117,7 +118,7 @@ impl Warm {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CompilerCache {
     #[default]
@@ -151,6 +152,7 @@ setup = "vsdevcmd -arch=x64"
 command = "cl /c {flags} /showIncludes /Fo{out} {in}"
 deps = "msvc"
 output = ".build/{path}.obj"
+outputs = ["{out.path}.pdb"]
 cache = "orrin"
 
 [targets.game]
@@ -178,6 +180,7 @@ build = { command = "make" }
         let manifest = Manifest::parse(text).unwrap();
         assert_eq!(manifest.rules["cxx"].deps, Deps::Msvc);
         assert_eq!(manifest.rules["cxx"].cache, CompilerCache::Orrin);
+        assert_eq!(manifest.rules["cxx"].outputs, ["{out.path}.pdb"]);
         let game = &manifest.targets["game"];
         assert_eq!(game.steps[0].files, ["game/**/*.cpp"]);
         assert_eq!(game.steps[1].input, [PREVIOUS]);

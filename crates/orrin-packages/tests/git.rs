@@ -58,7 +58,7 @@ async fn fetches_a_tag_once_and_cleans_it_when_unused() {
         tag: Some("v1".into()),
         ..Default::default()
     };
-    let need = PackageNeed { project: ProjectId::new(), name: "lib".into(), package };
+    let need = PackageNeed { project: ProjectId::new(), name: "lib".into(), package, rules: Default::default() };
 
     let packages = wire(&home, 0);
     let first = packages.ensure(need.clone()).await.unwrap();
