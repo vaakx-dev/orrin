@@ -16,9 +16,40 @@ async fn import(rig: &Rig, files: &[(&str, &str)]) -> ProjectOpened {
 
 async fn worker(rig: &Rig, project: &ProjectId) -> View {
     rig.views
-        .create(ViewCreate { project: project.clone(), owner: "agent".into(), base: None, claims: vec![] })
+        .create(ViewCreate {
+            project: project.clone(),
+            owner: "agent".into(),
+            base: None,
+            base_view: None,
+            claims: vec![],
+        })
         .await
         .unwrap()
+}
+
+#[tokio::test]
+async fn a_view_based_on_a_view_starts_from_its_edits_and_hands_edits_back() {
+    let rig = Rig::new(1 << 20);
+    let opened = import(&rig, &[("a.txt", "hello\n")]).await;
+    let project = opened.project.id.clone();
+    let parent = worker(&rig, &project).await;
+    rig.views.patch(edit(&project, &parent, "a.txt", "hello", "parent")).await.unwrap();
+    let from_parent = ViewCreate {
+        project: project.clone(),
+        owner: "helper".into(),
+        base: None,
+        base_view: Some(parent.id.clone()),
+        claims: vec![],
+    };
+    let child = rig.views.create(from_parent).await.unwrap();
+    assert_eq!(child.base_view.as_ref(), Some(&parent.id));
+    assert_eq!(std::fs::read_to_string(child.path.join("a.txt")).unwrap(), "parent\n");
+
+    std::fs::write(child.path.join("a.txt"), "child\n").unwrap();
+    let files = rig.views.capture(&child.id).await.unwrap();
+    assert!(rig.views.take(&parent.id, &child.base, &files).await.unwrap().is_empty());
+    assert_eq!(std::fs::read_to_string(parent.path.join("a.txt")).unwrap(), "child\n");
+    assert_eq!(rig.views.take(&parent.id, &child.base, &files).await.unwrap(), ["a.txt"]);
 }
 
 fn edit(project: &ProjectId, view: &View, path: &str, old: &str, new: &str) -> Patch {
@@ -184,7 +215,7 @@ async fn landed_worker_view_is_kept_then_purged() {
         undoes: None,
     };
     rig.projects.append(vec![change.clone()]).await.unwrap();
-    rig.views.landed(&view.id, &change.id).await.unwrap();
+    rig.views.landed(&view.id, Some(&change.id)).await.unwrap();
     assert_eq!(rig.views.get(&view.id).await.unwrap().state, ViewState::Landed);
     assert!(view.path.exists());
 

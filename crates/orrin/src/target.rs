@@ -103,6 +103,7 @@ mod tests {
             kind: ViewKind::User,
             path: path.into(),
             base: Hash::of(b""),
+            base_view: None,
             claims: vec![],
             state: ViewState::Open,
             created_at: 0,

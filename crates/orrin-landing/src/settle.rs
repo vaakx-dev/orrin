@@ -14,10 +14,10 @@ pub async fn settle(hub: &Hub, project: &ProjectId, landed: Option<&View>, mut o
         return out;
     };
     if let Some(view) = landed {
-        if let Err(err) = hub.views.landed(&view.id, &change.id).await {
+        if let Err(err) = hub.views.landed(&view.id, Some(&change.id)).await {
             tracing::warn!(view = %view.id, "could not mark view landed: {err}");
         }
-        hub.events.emit(Event::ViewLanded { view: view.id.clone(), change: change.id.clone() });
+        hub.events.emit(Event::ViewLanded { view: view.id.clone(), change: Some(change.id.clone()), into: None });
     }
     out.skipped = advance(hub, project, landed, &change.snapshot).await;
     out
@@ -53,5 +53,5 @@ fn follows(view: &View, landed: Option<&View>) -> bool {
     if landed.is_some_and(|landed| landed.id == view.id) {
         return view.kind == ViewKind::User;
     }
-    view.state == ViewState::Open
+    view.state == ViewState::Open && view.base_view.is_none()
 }

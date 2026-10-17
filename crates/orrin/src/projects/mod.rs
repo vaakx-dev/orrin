@@ -36,14 +36,16 @@ pub async fn create_view(
     project: Option<&str>,
     owner: String,
     claims: Vec<String>,
+    from: Option<String>,
 ) -> anyhow::Result<Outcome> {
     let project = api.project(project).await?.id;
-    api.show(&api.send(ViewCreate { project, owner, base: None, claims }).await?, show::view)?;
+    let base_view = from.as_deref().map(ViewId::from);
+    api.show(&api.send(ViewCreate { project, owner, base: None, base_view, claims }).await?, show::view)?;
     Ok(Outcome::Done)
 }
 
-pub async fn land(api: &Api, view: &str, intent: String) -> anyhow::Result<Outcome> {
-    let out = api.send(ViewLand { view: ViewId::from(view), intent }).await?;
+pub async fn land(api: &Api, view: &str, intent: String, into: Option<String>) -> anyhow::Result<Outcome> {
+    let out = api.send(ViewLand { view: ViewId::from(view), intent, into: into.as_deref().map(ViewId::from) }).await?;
     landed(api, out)
 }
 

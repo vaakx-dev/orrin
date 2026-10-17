@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use orrin_core::api::{ProjectOpened, ProjectsImport, ViewCreate};
 use orrin_core::model::{Entry, Project, Snapshot, View, ViewKind, ViewState};
 use orrin_core::service::{Edits, Store};
-use orrin_core::{Error, ProjectId, Result, ViewId, now_ms};
+use orrin_core::{Error, ProjectId, Result, SnapshotId, ViewId, now_ms};
 use rayon::prelude::*;
 
 use crate::disk::rules::Rules;
@@ -13,6 +13,7 @@ use crate::disk::stats::Stats;
 use crate::inner::Inner;
 use crate::pools;
 use crate::slot::{Slot, ViewRecord};
+use crate::snapshots::{moved_paths, with_edits};
 use crate::watch::watch;
 
 const USER: &str = "user";
@@ -56,7 +57,11 @@ impl Inner {
 
     pub async fn create(&self, input: ViewCreate) -> Result<View> {
         let project = self.hub.projects.get(&input.project).await?;
-        let base = input.base.unwrap_or(project.main);
+        let base = match (&input.base_view, input.base) {
+            (Some(_), Some(_)) => return Err(Error::invalid("give base or base_view, not both")),
+            (Some(parent), None) => self.current_state(&project.id, parent).await?,
+            (None, base) => base.unwrap_or_else(|| project.main.clone()),
+        };
         let folder = self.folder_at(&project.id, &base).await?;
         let view = View {
             id: folder.id,
@@ -64,15 +69,31 @@ impl Inner {
             owner: input.owner,
             kind: ViewKind::Worker,
             path: folder.root,
-            base,
+            base: base.clone(),
+            base_view: input.base_view,
             claims: input.claims,
             state: ViewState::Open,
             created_at: now_ms(),
             landed: None,
         };
-        let view = self.open_view(view, folder.stats, true).await?;
+        let main = self.hub.store.snapshot(&project.main)?;
+        let dirty: Vec<String> = moved_paths(&main, &self.hub.store.snapshot(&base)?).into_iter().collect();
+        let view = self.open_view(view, folder.stats, dirty.is_empty()).await?;
+        if !dirty.is_empty() {
+            self.touched(&*self.slot(&view.id)?, dirty).await;
+        }
         self.link_latest(&view.id).await;
         Ok(view)
+    }
+
+    async fn current_state(&self, project: &ProjectId, id: &ViewId) -> Result<SnapshotId> {
+        let parent = self.get(id).await?;
+        if parent.project != *project || parent.state != ViewState::Open {
+            return Err(Error::invalid(format!("view {id} is not an open view of project {project}")));
+        }
+        let edits = self.capture(id).await?;
+        let base = self.hub.store.snapshot(&parent.base)?;
+        self.hub.store.put_snapshot(&with_edits(&base, &edits))
     }
 
     async fn open_view(&self, view: View, stats: Stats, clean: bool) -> Result<View> {
@@ -128,6 +149,7 @@ fn user_view(project: &Project, root: PathBuf) -> View {
         kind: ViewKind::User,
         path: root,
         base: project.main.clone(),
+        base_view: None,
         claims: Vec::new(),
         state: ViewState::Open,
         created_at: now_ms(),

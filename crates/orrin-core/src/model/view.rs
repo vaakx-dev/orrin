@@ -29,6 +29,8 @@ pub struct View {
     pub kind: ViewKind,
     pub path: PathBuf,
     pub base: SnapshotId,
+    #[serde(default)]
+    pub base_view: Option<ViewId>,
     pub claims: Vec<String>,
     pub state: ViewState,
     pub created_at: Millis,

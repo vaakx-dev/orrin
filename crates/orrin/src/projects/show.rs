@@ -48,7 +48,7 @@ pub fn landed(out: &LandOutput) -> String {
             change.files.len(),
             short(out.main.as_str())
         )),
-        (None, true) => lines.push("Nothing to land.".to_string()),
+        (None, true) => lines.push("Landed into the view.".to_string()),
         (_, false) => lines.push(format!("Not landed: {} conflicts", out.conflicts.len())),
     }
     lines.extend(out.conflicts.iter().map(|c| format!("  conflict  {}  {}", c.path, c.reason)));

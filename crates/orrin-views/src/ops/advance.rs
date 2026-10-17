@@ -43,18 +43,46 @@ impl Inner {
         Ok(skipped)
     }
 
-    pub async fn landed(&self, id: &ViewId, change: &ChangeId) -> Result<()> {
-        let change = self.hub.projects.change(change).await?;
+    pub async fn take(&self, id: &ViewId, expected: &SnapshotId, files: &Edits) -> Result<Vec<String>> {
         let slot = self.slot(id)?;
+        let record = slot.record.lock().await;
+        let expected = self.hub.store.snapshot(expected)?;
+        let mut missed = Vec::new();
+        let mut written = Vec::new();
+        for (path, state) in files {
+            let current = slot.stats().disk_state(path, &slot.root.join(path))?.map(|s| s.hash);
+            let wanted =
+                state.as_ref().map(|s| Entry { path: path.clone(), hash: s.hash.clone(), size: s.size, mode: s.mode });
+            let unchanged = current.as_ref() == expected.get(path).map(|e| &e.hash);
+            if unchanged && self.update(&slot, path, wanted.as_ref()).is_ok() {
+                written.push(path.clone());
+            } else {
+                missed.push(path.clone());
+            }
+        }
+        drop(record);
+        if !written.is_empty() {
+            self.touched(&slot, written).await;
+        }
+        Ok(missed)
+    }
+
+    pub async fn landed(&self, id: &ViewId, change: Option<&ChangeId>) -> Result<()> {
+        let slot = self.slot(id)?;
+        let change = match change {
+            Some(change) => Some(self.hub.projects.change(change).await?),
+            None => None,
+        };
         let mut record = slot.record.lock().await;
-        record.view.landed = Some(change.id.clone());
-        match slot.kind {
-            ViewKind::Worker => {
+        record.view.landed = change.as_ref().map(|c| c.id.clone());
+        match (slot.kind, change) {
+            (ViewKind::Worker, _) => {
                 record.view.state = ViewState::Landed;
                 record.closed_at = Some(now_ms());
                 slot.set_watcher(None);
             }
-            ViewKind::User => {
+            (ViewKind::User, None) => return Err(Error::invalid(format!("user view {id} can only land to main"))),
+            (ViewKind::User, Some(change)) => {
                 let ours: Edits = change
                     .files
                     .iter()

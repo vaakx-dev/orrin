@@ -194,6 +194,7 @@ impl Views for FolderViews {
             kind: ViewKind::Worker,
             path: PathBuf::new(),
             base: Hash::of(b""),
+            base_view: None,
             claims: vec![],
             state: ViewState::Open,
             created_at: 0,
@@ -218,7 +219,10 @@ impl Views for FolderViews {
     async fn advance(&self, _: &ViewId, _: &SnapshotId) -> Result<Vec<String>> {
         nope()
     }
-    async fn landed(&self, _: &ViewId, _: &ChangeId) -> Result<()> {
+    async fn take(&self, _: &ViewId, _: &SnapshotId, _: &Edits) -> Result<Vec<String>> {
+        nope()
+    }
+    async fn landed(&self, _: &ViewId, _: Option<&ChangeId>) -> Result<()> {
         nope()
     }
     async fn link(&self, _: &ProjectId, _: Linked) -> Result<()> {

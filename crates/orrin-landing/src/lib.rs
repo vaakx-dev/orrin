@@ -1,5 +1,6 @@
 mod claims;
 mod commit;
+mod into;
 mod proposal;
 mod rebase;
 mod remote;
@@ -37,6 +38,9 @@ impl Landing for Lander {
             return Err(Error::invalid(format!("view {} is not open", view.id)));
         }
         let files = self.hub.views.capture(&view.id).await?;
+        if let Some(into) = &input.into {
+            return into::land_into(&self.hub, &view, files, input.intent, into).await;
+        }
         let out = self.submit(Proposal::from_view(&view, files, input.intent)).await?;
         Ok(settle::settle(&self.hub, &view.project, Some(&view), out).await)
     }

@@ -42,6 +42,8 @@ pub enum Command {
         view: String,
         #[arg(short = 'm', long, default_value = "")]
         intent: String,
+        #[arg(long)]
+        into: Option<String>,
     },
     Undo {
         project: Option<String>,
@@ -101,6 +103,8 @@ pub enum ViewCommand {
         owner: String,
         #[arg(long)]
         claim: Vec<String>,
+        #[arg(long)]
+        from: Option<String>,
     },
 }
 

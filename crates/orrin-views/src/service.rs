@@ -128,7 +128,11 @@ impl Views for ViewsService {
         self.0.advance(id, snapshot).await
     }
 
-    async fn landed(&self, id: &ViewId, change: &ChangeId) -> Result<()> {
+    async fn take(&self, id: &ViewId, expected: &SnapshotId, files: &Edits) -> Result<Vec<String>> {
+        self.0.take(id, expected, files).await
+    }
+
+    async fn landed(&self, id: &ViewId, change: Option<&ChangeId>) -> Result<()> {
         self.0.landed(id, change).await
     }
 

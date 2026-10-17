@@ -48,10 +48,10 @@ async fn run(cli: Cli) -> anyhow::Result<Outcome> {
         Command::Projects => projects::list(&api).await,
         Command::Import { folder, name } => projects::import(&api, folder, name).await,
         Command::Views { project } => projects::views(&api, project.as_deref()).await,
-        Command::View(ViewCommand::New { project, owner, claim }) => {
-            projects::create_view(&api, project.as_deref(), owner, claim).await
+        Command::View(ViewCommand::New { project, owner, claim, from }) => {
+            projects::create_view(&api, project.as_deref(), owner, claim, from).await
         }
-        Command::Land { view, intent } => projects::land(&api, &view, intent).await,
+        Command::Land { view, intent, into } => projects::land(&api, &view, intent, into).await,
         Command::Undo { project, change, author } => projects::undo(&api, project.as_deref(), change, author).await,
         Command::Find(scoped) => index::find(&api, &scoped).await,
         Command::Search { scoped, regex, case_sensitive, paths } => {

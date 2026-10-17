@@ -99,11 +99,18 @@ impl Views for FakeViews {
         Ok(self.busy.lock().unwrap().clone())
     }
 
-    async fn landed(&self, id: &ViewId, change: &ChangeId) -> Result<()> {
+    async fn take(&self, id: &ViewId, _: &SnapshotId, files: &Edits) -> Result<Vec<String>> {
+        let mut views = self.views.lock().unwrap();
+        let (_, edits) = views.get_mut(id).ok_or_else(|| Error::not_found(id.to_string()))?;
+        edits.extend(files.clone());
+        Ok(Vec::new())
+    }
+
+    async fn landed(&self, id: &ViewId, change: Option<&ChangeId>) -> Result<()> {
         let mut views = self.views.lock().unwrap();
         let (view, _) = views.get_mut(id).ok_or_else(|| Error::not_found(id.to_string()))?;
         view.state = ViewState::Landed;
-        view.landed = Some(change.clone());
+        view.landed = change.cloned();
         Ok(())
     }
 

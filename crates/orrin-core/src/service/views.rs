@@ -31,7 +31,8 @@ pub trait Views: Service {
     async fn adopt(&self, project: &ProjectId, path: &Path) -> Result<View>;
     async fn capture(&self, id: &ViewId) -> Result<Edits>;
     async fn advance(&self, id: &ViewId, snapshot: &SnapshotId) -> Result<Vec<String>>;
-    async fn landed(&self, id: &ViewId, change: &ChangeId) -> Result<()>;
+    async fn take(&self, id: &ViewId, expected: &SnapshotId, files: &Edits) -> Result<Vec<String>>;
+    async fn landed(&self, id: &ViewId, change: Option<&ChangeId>) -> Result<()>;
     async fn link(&self, project: &ProjectId, linked: Linked) -> Result<()>;
     async fn deliver(&self, project: &ProjectId, files: Vec<Artifact>) -> Result<Delivered>;
 }

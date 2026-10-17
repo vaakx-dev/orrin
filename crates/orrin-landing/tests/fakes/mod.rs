@@ -78,13 +78,48 @@ impl Rig {
     }
 
     pub fn view(&self, kind: ViewKind, edits: &[(&str, Option<&str>)]) -> ViewId {
+        self.add_view(kind, self.main(), None, edits)
+    }
+
+    pub fn child(&self, parent: &ViewId, edits: &[(&str, Option<&str>)]) -> ViewId {
+        let (view, parent_edits) = self.views.views.lock().unwrap()[parent].clone();
+        let base = self.store.snapshot(&view.base).unwrap();
+        let mut entries: BTreeMap<String, Entry> = base.entries.into_iter().map(|e| (e.path.clone(), e)).collect();
+        for (path, state) in parent_edits {
+            match state {
+                Some(s) => entries.insert(path.clone(), Entry { path, hash: s.hash, size: s.size, mode: s.mode }),
+                None => entries.remove(&path),
+            };
+        }
+        let base = self.store.put_snapshot(&Snapshot::new(entries.into_values().collect())).unwrap();
+        self.add_view(ViewKind::Worker, base, Some(parent.clone()), edits)
+    }
+
+    pub fn edit(&self, view: &ViewId, edits: &[(&str, Option<&str>)]) {
+        let edits = self.edits(edits);
+        self.views.views.lock().unwrap().get_mut(view).unwrap().1.extend(edits);
+    }
+
+    pub fn read_in(&self, view: &ViewId, path: &str) -> Option<String> {
+        let state = self.views.views.lock().unwrap()[view].1.get(path).cloned()??;
+        Some(String::from_utf8(self.store.get(&state.hash).unwrap()).unwrap())
+    }
+
+    fn add_view(
+        &self,
+        kind: ViewKind,
+        base: SnapshotId,
+        base_view: Option<ViewId>,
+        edits: &[(&str, Option<&str>)],
+    ) -> ViewId {
         let view = View {
             id: ViewId::new(),
             project: self.project.clone(),
             owner: "worker".into(),
             kind,
             path: Default::default(),
-            base: self.main(),
+            base,
+            base_view,
             claims: Vec::new(),
             state: ViewState::Open,
             created_at: 0,

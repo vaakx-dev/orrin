@@ -14,7 +14,7 @@ pub enum Event {
     #[serde(rename = "view.changed")]
     ViewChanged { view: ViewId, paths: Vec<String>, clock: Clock },
     #[serde(rename = "view.landed")]
-    ViewLanded { view: ViewId, change: ChangeId },
+    ViewLanded { view: ViewId, change: Option<ChangeId>, into: Option<ViewId> },
     #[serde(rename = "view.conflicts")]
     ViewConflicts { view: ViewId, conflicts: Vec<Conflict> },
     #[serde(rename = "view.skipped")]

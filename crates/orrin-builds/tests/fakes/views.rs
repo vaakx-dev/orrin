@@ -23,6 +23,7 @@ fn user(project: ProjectId) -> View {
         kind: ViewKind::User,
         path: "user".into(),
         base: Hash::of(b""),
+        base_view: None,
         claims: Vec::new(),
         state: ViewState::Open,
         created_at: 0,
@@ -50,7 +51,8 @@ impl Views for FakeViews {
     async fn adopt(&self, _: &ProjectId, _: &Path) -> Result<View> { unimplemented!() }
     async fn capture(&self, _: &ViewId) -> Result<Edits> { unimplemented!() }
     async fn advance(&self, _: &ViewId, _: &SnapshotId) -> Result<Vec<String>> { unimplemented!() }
-    async fn landed(&self, _: &ViewId, _: &ChangeId) -> Result<()> { unimplemented!() }
+    async fn take(&self, _: &ViewId, _: &SnapshotId, _: &Edits) -> Result<Vec<String>> { unimplemented!() }
+    async fn landed(&self, _: &ViewId, _: Option<&ChangeId>) -> Result<()> { unimplemented!() }
     async fn link(&self, _: &ProjectId, _: Linked) -> Result<()> { Ok(()) }
     async fn deliver(&self, _: &ProjectId, files: Vec<Artifact>) -> Result<Delivered> {
         self.delivered.lock().unwrap().push(files.iter().map(|f| f.path.clone()).collect());

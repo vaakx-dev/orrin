@@ -11,6 +11,8 @@ pub struct ViewCreate {
     #[serde(default)]
     pub base: Option<SnapshotId>,
     #[serde(default)]
+    pub base_view: Option<ViewId>,
+    #[serde(default)]
     pub claims: Vec<String>,
 }
 
@@ -32,6 +34,8 @@ pub struct ViewListOutput {
 pub struct ViewLand {
     pub view: ViewId,
     pub intent: String,
+    #[serde(default)]
+    pub into: Option<ViewId>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

@@ -72,7 +72,8 @@ impl Views for Unavailable {
     async fn adopt(&self, _: &ProjectId, _: &Path) -> Result<View> { self.err() }
     async fn capture(&self, _: &ViewId) -> Result<Edits> { self.err() }
     async fn advance(&self, _: &ViewId, _: &SnapshotId) -> Result<Vec<String>> { self.err() }
-    async fn landed(&self, _: &ViewId, _: &ChangeId) -> Result<()> { self.err() }
+    async fn take(&self, _: &ViewId, _: &SnapshotId, _: &Edits) -> Result<Vec<String>> { self.err() }
+    async fn landed(&self, _: &ViewId, _: Option<&ChangeId>) -> Result<()> { self.err() }
     async fn link(&self, _: &ProjectId, _: Linked) -> Result<()> { Ok(()) }
     async fn deliver(&self, _: &ProjectId, _: Vec<Artifact>) -> Result<Delivered> { self.err() }
 }
