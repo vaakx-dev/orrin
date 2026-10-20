@@ -15,7 +15,7 @@ impl Inner {
         let path = clean_path(&input.path)?;
         let (bytes, clock) = match &input.view {
             Some(id) => {
-                let slot = self.slot_in(&input.project, id)?;
+                let slot = self.open_slot(&input.project, id).await?;
                 let bytes =
                     std::fs::read(slot.root.join(&path)).map_err(|_| Error::not_found(format!("no file {path}")))?;
                 (bytes, self.hub.index.clock(&input.project, Some(id)).await)

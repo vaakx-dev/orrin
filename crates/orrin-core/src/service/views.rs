@@ -14,6 +14,12 @@ use crate::service::Service;
 
 pub type Edits = BTreeMap<String, Option<FileState>>;
 
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Pulled {
+    pub written: Vec<String>,
+    pub skipped: Vec<String>,
+}
+
 #[async_trait]
 pub trait Views: Service {
     async fn import(&self, input: ProjectsImport) -> Result<ProjectOpened>;
@@ -31,6 +37,7 @@ pub trait Views: Service {
     async fn adopt(&self, project: &ProjectId, path: &Path) -> Result<View>;
     async fn capture(&self, id: &ViewId) -> Result<Edits>;
     async fn advance(&self, id: &ViewId, snapshot: &SnapshotId) -> Result<Vec<String>>;
+    async fn pull(&self, id: &ViewId, snapshot: &SnapshotId, merged: &Edits) -> Result<Pulled>;
     async fn take(&self, id: &ViewId, expected: &SnapshotId, files: &Edits) -> Result<Vec<String>>;
     async fn landed(&self, id: &ViewId, change: Option<&ChangeId>) -> Result<()>;
     async fn link(&self, project: &ProjectId, linked: Linked) -> Result<()>;

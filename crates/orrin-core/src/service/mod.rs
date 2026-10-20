@@ -25,7 +25,7 @@ pub use peers::{Peers, call_peer};
 pub use projects::Projects;
 pub use store::{GcReport, Materialise, Store};
 pub use unavailable::Unavailable;
-pub use views::{Edits, Views};
+pub use views::{Edits, Pulled, Views};
 
 use crate::error::Result;
 

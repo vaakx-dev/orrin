@@ -4,7 +4,7 @@ use std::sync::Mutex;
 use async_trait::async_trait;
 use orrin_core::api::*;
 use orrin_core::model::{Artifact, Delivered, Linked, View, ViewKind, ViewState};
-use orrin_core::service::{Edits, Service, Views};
+use orrin_core::service::{Edits, Pulled, Service, Views};
 use orrin_core::{ChangeId, Hash, ProjectId, Result, SnapshotId, ViewId};
 
 #[derive(Default)]
@@ -51,6 +51,7 @@ impl Views for FakeViews {
     async fn adopt(&self, _: &ProjectId, _: &Path) -> Result<View> { unimplemented!() }
     async fn capture(&self, _: &ViewId) -> Result<Edits> { unimplemented!() }
     async fn advance(&self, _: &ViewId, _: &SnapshotId) -> Result<Vec<String>> { unimplemented!() }
+    async fn pull(&self, _: &ViewId, _: &SnapshotId, _: &Edits) -> Result<Pulled> { unimplemented!() }
     async fn take(&self, _: &ViewId, _: &SnapshotId, _: &Edits) -> Result<Vec<String>> { unimplemented!() }
     async fn landed(&self, _: &ViewId, _: Option<&ChangeId>) -> Result<()> { unimplemented!() }
     async fn link(&self, _: &ProjectId, _: Linked) -> Result<()> { Ok(()) }

@@ -128,6 +128,9 @@ impl Landing for FakeLanding {
     async fn undo(&self, _: Undo) -> Result<LandOutput> {
         unimplemented!()
     }
+    async fn pull(&self, _: ViewPull) -> Result<PullOutput> {
+        unimplemented!()
+    }
     async fn land_change(&self, input: SyncLand) -> Result<LandOutput> {
         let main = self.projects.get(&input.project).await?.main;
         let mut entries: HashMap<String, Entry> =

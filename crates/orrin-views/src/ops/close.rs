@@ -2,6 +2,7 @@ use orrin_core::api::{Done, ViewDrop, ViewList, ViewListOutput};
 use orrin_core::model::{View, ViewKind, ViewState};
 use orrin_core::{Result, ViewId, now_ms};
 
+use crate::disk::files::{remove_any, retired};
 use crate::inner::Inner;
 
 const DAY_MS: u64 = 24 * 60 * 60 * 1000;
@@ -42,8 +43,11 @@ impl Inner {
             if closed.is_none_or(|at| at > cutoff) {
                 continue;
             }
-            if slot.kind == ViewKind::Worker && slot.root.exists() {
-                std::fs::remove_dir_all(&slot.root)?;
+            if slot.kind == ViewKind::Worker {
+                if slot.root.exists() {
+                    std::fs::remove_dir_all(&slot.root)?;
+                }
+                remove_any(&retired(&slot.root));
             }
             self.forget(&slot.id)?;
             purged += 1;

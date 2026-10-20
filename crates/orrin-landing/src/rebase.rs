@@ -11,7 +11,7 @@ pub struct Rebased {
     pub conflicts: Vec<Conflict>,
 }
 
-enum Resolved {
+pub enum Resolved {
     Keep,
     Take(Option<FileState>),
     Conflict(String),
@@ -51,7 +51,7 @@ pub fn apply(main: &Snapshot, files: &Edits) -> Snapshot {
     Snapshot::new(entries)
 }
 
-fn resolve(
+pub fn resolve(
     hub: &Services,
     claims: &Claims,
     path: &str,
@@ -66,10 +66,14 @@ fn resolve(
         return Ok(Resolved::Take(ours.clone()));
     }
     let (Some(ours), Some(theirs)) = (ours, theirs) else {
-        return Ok(Resolved::Conflict("edited on one side and deleted on the other".into()));
+        let reason = match ours {
+            Some(_) => "you changed it and the other side deleted it",
+            None => "you deleted it and the other side changed it",
+        };
+        return Ok(Resolved::Conflict(reason.into()));
     };
     let Some(merger) = hub.merger_for(path) else {
-        return Ok(Resolved::Conflict("both sides changed a file that can't be merged; claim it to overwrite".into()));
+        return Ok(Resolved::Conflict("both sides changed it and this file type can't be merged".into()));
     };
     let base = match base {
         Some(base) => hub.store.get(&base.hash)?,
@@ -85,10 +89,10 @@ fn resolve(
     })
 }
 
-fn state(snapshot: &Snapshot, path: &str) -> Option<FileState> {
+pub fn state(snapshot: &Snapshot, path: &str) -> Option<FileState> {
     snapshot.get(path).map(Entry::state)
 }
 
-fn hash(state: &Option<FileState>) -> Option<orrin_core::Hash> {
+pub fn hash(state: &Option<FileState>) -> Option<orrin_core::Hash> {
     state.as_ref().map(|s| s.hash.clone())
 }

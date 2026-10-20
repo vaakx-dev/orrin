@@ -6,7 +6,7 @@ use orrin_core::api::{Create, Delete, Move, Patch, Touched, Written};
 use orrin_core::model::{Encoding, clean_path};
 use orrin_core::{Error, Hash, Result};
 
-use crate::content::text::apply;
+use crate::content::text::{apply, with_line_ends};
 use crate::disk::files::write_fresh;
 use crate::inner::Inner;
 use crate::slot::Slot;
@@ -28,17 +28,17 @@ impl Inner {
     pub async fn create_file(&self, input: Create) -> Result<Written> {
         let slot = self.open_slot(&input.project, &input.view).await?;
         let path = clean_path(&input.path)?;
-        let bytes = match input.encoding {
-            Encoding::Utf8 => input.content.into_bytes(),
-            Encoding::Base64 => {
-                STANDARD.decode(&input.content).map_err(|e| Error::invalid(format!("bad base64: {e}")))?
-            }
-        };
         let record = slot.record.lock().await;
         let abs = slot.root.join(&path);
         if abs.is_dir() || (abs.exists() && !input.overwrite) {
             return Err(Error::conflict(format!("{path} already exists")));
         }
+        let bytes = match input.encoding {
+            Encoding::Utf8 => with_line_ends(fs::read(&abs).ok().as_deref(), input.content).into_bytes(),
+            Encoding::Base64 => {
+                STANDARD.decode(&input.content).map_err(|e| Error::invalid(format!("bad base64: {e}")))?
+            }
+        };
         let hash = self.write_file(&slot, &path, &bytes)?;
         drop(record);
         let clock = self.touched(&slot, vec![path.clone()]).await;

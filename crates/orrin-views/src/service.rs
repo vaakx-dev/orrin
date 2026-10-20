@@ -9,7 +9,7 @@ use orrin_core::api::{
     ReadOutput, Touched, ViewCreate, ViewDrop, ViewList, ViewListOutput, Written,
 };
 use orrin_core::model::{Artifact, Delivered, Linked, View, ViewKind};
-use orrin_core::service::{Edits, Service, Views};
+use orrin_core::service::{Edits, Pulled, Service, Views};
 use orrin_core::{ChangeId, ProjectId, Result, SnapshotId, ViewId};
 
 use crate::disk::files::remove_any;
@@ -126,6 +126,10 @@ impl Views for ViewsService {
 
     async fn advance(&self, id: &ViewId, snapshot: &SnapshotId) -> Result<Vec<String>> {
         self.0.advance(id, snapshot).await
+    }
+
+    async fn pull(&self, id: &ViewId, snapshot: &SnapshotId, merged: &Edits) -> Result<Pulled> {
+        self.0.pull(id, snapshot, merged).await
     }
 
     async fn take(&self, id: &ViewId, expected: &SnapshotId, files: &Edits) -> Result<Vec<String>> {

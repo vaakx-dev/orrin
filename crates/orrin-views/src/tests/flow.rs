@@ -1,8 +1,10 @@
 use std::time::{Duration, UNIX_EPOCH};
 
 use orrin_core::api::*;
-use orrin_core::model::{Artifact, Change, Entry, FileStatus, Linked, SHARE_FROM, Snapshot, View, ViewState};
-use orrin_core::service::Projects;
+use orrin_core::model::{
+    Artifact, Change, Entry, FileState, FileStatus, Linked, SHARE_FROM, Snapshot, View, ViewState,
+};
+use orrin_core::service::{Edits, Projects};
 use orrin_core::{ChangeId, ProjectId, now_ms};
 
 use crate::inner::Inner;
@@ -196,6 +198,34 @@ async fn advance_updates_untouched_files_and_skips_modified() {
 }
 
 #[tokio::test]
+async fn pull_writes_merged_files_and_moves_their_base() {
+    let rig = Rig::new(1 << 20);
+    let opened = import(&rig, &[("a.txt", "a1\n"), ("b.txt", "b1\n")]).await;
+    let project = opened.project.id.clone();
+    let view = worker(&rig, &project).await;
+    rig.views.patch(edit(&project, &view, "a.txt", "a1", "mine")).await.unwrap();
+    rig.views.capture(&view.id).await.unwrap();
+    let store = &rig.hub.store;
+    let file = |text: &str| FileState {
+        hash: store.put(text.as_bytes()).unwrap(),
+        size: text.len() as u64,
+        mode: Default::default(),
+    };
+    let theirs: Edits = [("a.txt", "theirs\n"), ("b.txt", "b2\n")].map(|(p, t)| (p.to_string(), Some(file(t)))).into();
+    let next = store.put_snapshot(&with_edits(&store.snapshot(&opened.project.main).unwrap(), &theirs)).unwrap();
+    let merged: Edits = [("a.txt".to_string(), Some(file("merged\n")))].into();
+
+    let pulled = rig.views.pull(&view.id, &next, &merged).await.unwrap();
+
+    assert_eq!(pulled.written, ["a.txt", "b.txt"]);
+    assert_eq!(std::fs::read_to_string(view.path.join("a.txt")).unwrap(), "merged\n");
+    assert_eq!(std::fs::read_to_string(view.path.join("b.txt")).unwrap(), "b2\n");
+    assert_eq!(rig.views.get(&view.id).await.unwrap().base, next);
+    let changes = rig.views.changes(Changes { project, view: view.id }).await.unwrap();
+    assert_eq!(statuses(&changes), [("a.txt".to_string(), FileStatus::Modified)]);
+}
+
+#[tokio::test]
 async fn landed_worker_view_is_kept_then_purged() {
     let rig = Rig::new(1 << 20);
     let opened = import(&rig, &[("a.txt", "a\n")]).await;
@@ -217,11 +247,22 @@ async fn landed_worker_view_is_kept_then_purged() {
     rig.projects.append(vec![change.clone()]).await.unwrap();
     rig.views.landed(&view.id, Some(&change.id)).await.unwrap();
     assert_eq!(rig.views.get(&view.id).await.unwrap().state, ViewState::Landed);
-    assert!(view.path.exists());
+    let aside = view.path.with_extension("landed");
+    assert!(!view.path.exists() && aside.exists());
+    let read = Read {
+        project: project.clone(),
+        view: Some(view.id.clone()),
+        path: "a.txt".into(),
+        offset: None,
+        limit: None,
+        encoding: None,
+        anchor: None,
+    };
+    assert!(rig.views.read(read).await.unwrap_err().message.contains("landed"));
 
     tokio::time::sleep(Duration::from_millis(5)).await;
     assert_eq!(rig.inner.purge().await.unwrap(), 1);
-    assert!(!view.path.exists());
+    assert!(!view.path.exists() && !aside.exists());
     assert!(rig.views.get(&view.id).await.is_err());
 }
 

@@ -57,6 +57,7 @@ requests! {
     ViewCreate => "view.create": View,
     ViewList => "view.list": ViewListOutput,
     ViewLand => "view.land": LandOutput,
+    ViewPull => "view.pull": PullOutput,
     ViewDrop => "view.drop": Done,
     Undo => "undo": LandOutput,
     Facts => "facts": FactsOutput,

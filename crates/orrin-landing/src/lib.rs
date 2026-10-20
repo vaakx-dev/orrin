@@ -2,6 +2,7 @@ mod claims;
 mod commit;
 mod into;
 mod proposal;
+mod pull;
 mod rebase;
 mod remote;
 mod settle;
@@ -10,7 +11,7 @@ mod undo;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use orrin_core::api::{LandOutput, SyncLand, Undo, ViewLand};
+use orrin_core::api::{LandOutput, PullOutput, SyncLand, Undo, ViewLand, ViewPull};
 use orrin_core::model::ViewState;
 use orrin_core::service::{Hub, Landing, Service, Setup};
 use orrin_core::{Error, Result};
@@ -61,6 +62,11 @@ impl Landing for Lander {
         let project = input.project.clone();
         let out = self.submit(Proposal::from_sync(input)).await?;
         Ok(settle::settle(&self.hub, &project, None, out).await)
+    }
+
+    async fn pull(&self, input: ViewPull) -> Result<PullOutput> {
+        let _turn = self.turn.lock().await;
+        pull::pull(&self.hub, input).await
     }
 }
 

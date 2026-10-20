@@ -73,6 +73,7 @@ fn views(r: &mut Registry) {
     r.add(|h: Hub, i: api::ViewList| async move { h.views.list(i).await });
     r.add(|h: Hub, i: api::ViewDrop| async move { h.views.remove(i).await });
     r.add(|h: Hub, i: api::ViewLand| async move { h.landing.land(i).await });
+    r.add(|h: Hub, i: api::ViewPull| async move { h.landing.pull(i).await });
     r.add(|h: Hub, i: api::Undo| async move { h.landing.undo(i).await });
 }
 

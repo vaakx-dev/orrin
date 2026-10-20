@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex, RwLock};
 
 use orrin_core::api::Event;
 use orrin_core::config::ViewsConfig;
+use orrin_core::model::ViewState;
 use orrin_core::service::{Hub, Setup};
 use orrin_core::{Clock, Error, Events, Home, Identity, ProjectId, Result, ViewId};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
@@ -138,10 +139,13 @@ impl Inner {
 
     pub async fn open_slot(&self, project: &ProjectId, id: &ViewId) -> Result<Arc<Slot>> {
         let slot = self.slot_in(project, id)?;
-        if !Slot::is_open(&*slot.record.lock().await) {
-            return Err(Error::conflict(format!("view {id} is closed")));
-        }
-        Ok(slot)
+        let state = slot.record.lock().await.view.state;
+        let how = match state {
+            ViewState::Open => return Ok(slot),
+            ViewState::Landed => "landed",
+            ViewState::Dropped => "was dropped",
+        };
+        Err(Error::conflict(format!("view {id} {how} and is closed; it takes no more edits, so use your current view")))
     }
 
     pub async fn refresh_rules(&self, slot: &Slot) -> Arc<Rules> {

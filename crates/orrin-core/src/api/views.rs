@@ -40,6 +40,21 @@ pub struct ViewLand {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct ViewPull {
+    pub view: ViewId,
+    #[serde(default)]
+    pub from: Option<ViewId>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PullOutput {
+    pub changed: Vec<String>,
+    pub conflicts: Vec<Conflict>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ViewDrop {
     pub view: ViewId,
 }

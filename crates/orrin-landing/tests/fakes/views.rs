@@ -5,7 +5,7 @@ use std::sync::Mutex;
 use async_trait::async_trait;
 use orrin_core::api::*;
 use orrin_core::model::{Artifact, Delivered, Linked, View, ViewState};
-use orrin_core::service::{Edits, Service, Views};
+use orrin_core::service::{Edits, Pulled, Service, Views};
 use orrin_core::{ChangeId, Error, ProjectId, Result, SnapshotId, ViewId};
 
 #[derive(Default)]
@@ -97,6 +97,14 @@ impl Views for FakeViews {
         view.base = snapshot.clone();
         edits.clear();
         Ok(self.busy.lock().unwrap().clone())
+    }
+
+    async fn pull(&self, id: &ViewId, snapshot: &SnapshotId, merged: &Edits) -> Result<Pulled> {
+        let mut views = self.views.lock().unwrap();
+        let (view, edits) = views.get_mut(id).ok_or_else(|| Error::not_found(id.to_string()))?;
+        view.base = snapshot.clone();
+        *edits = merged.clone();
+        Ok(Pulled { written: merged.keys().cloned().collect(), skipped: Vec::new() })
     }
 
     async fn take(&self, id: &ViewId, _: &SnapshotId, files: &Edits) -> Result<Vec<String>> {

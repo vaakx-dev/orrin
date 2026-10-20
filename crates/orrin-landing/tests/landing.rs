@@ -1,7 +1,7 @@
 mod fakes;
 
 use fakes::Rig;
-use orrin_core::api::{Event, Undo, ViewLand};
+use orrin_core::api::{Event, Undo, ViewLand, ViewPull};
 use orrin_core::model::{ViewKind, ViewState};
 
 fn land(view: &orrin_core::ViewId) -> ViewLand {
@@ -99,6 +99,21 @@ async fn unmergeable_edits_on_both_sides_conflict() {
     assert!(conflict.base.is_some() && conflict.ours.is_some() && conflict.theirs.is_some());
     assert_eq!(rig.views.view(&worker).state, ViewState::Open);
     assert!(rig.events().iter().any(|e| matches!(e, Event::ViewConflicts { view, .. } if *view == worker)));
+}
+
+#[tokio::test]
+async fn pull_merges_main_into_edited_files_and_reports_what_it_kept() {
+    let rig = Rig::new(&[("a.txt", "1\n2\n"), ("hero.png", "base")]);
+    let worker = rig.view(ViewKind::Worker, &[("a.txt", Some("1\nV\n")), ("hero.png", Some("ours"))]);
+    rig.move_main(&[("a.txt", Some("M\n2\n")), ("hero.png", Some("theirs"))]).await;
+
+    let out = rig.hub.landing.pull(ViewPull { view: worker.clone(), from: None }).await.unwrap();
+
+    assert_eq!(out.changed, ["a.txt"]);
+    assert_eq!(out.conflicts.len(), 1);
+    assert!(out.conflicts[0].reason.contains("kept your version"), "{}", out.conflicts[0].reason);
+    assert_eq!(rig.read_in(&worker, "a.txt").as_deref(), Some("M\nV\n"));
+    assert_eq!(rig.views.view(&worker).base, rig.main());
 }
 
 #[tokio::test]

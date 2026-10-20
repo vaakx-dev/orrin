@@ -12,7 +12,7 @@ use crate::model::{
 };
 use crate::service::{
     Builds, Cache, Edits, Facts, GcReport, Git, Index, Landing, Materialise, PackageNeed, PackageReady, Packages,
-    Peers, Projects, Service, Store, Views,
+    Peers, Projects, Pulled, Service, Store, Views,
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -72,6 +72,7 @@ impl Views for Unavailable {
     async fn adopt(&self, _: &ProjectId, _: &Path) -> Result<View> { self.err() }
     async fn capture(&self, _: &ViewId) -> Result<Edits> { self.err() }
     async fn advance(&self, _: &ViewId, _: &SnapshotId) -> Result<Vec<String>> { self.err() }
+    async fn pull(&self, _: &ViewId, _: &SnapshotId, _: &Edits) -> Result<Pulled> { self.err() }
     async fn take(&self, _: &ViewId, _: &SnapshotId, _: &Edits) -> Result<Vec<String>> { self.err() }
     async fn landed(&self, _: &ViewId, _: Option<&ChangeId>) -> Result<()> { self.err() }
     async fn link(&self, _: &ProjectId, _: Linked) -> Result<()> { Ok(()) }
@@ -83,6 +84,7 @@ impl Landing for Unavailable {
     async fn land(&self, _: ViewLand) -> Result<LandOutput> { self.err() }
     async fn undo(&self, _: Undo) -> Result<LandOutput> { self.err() }
     async fn land_change(&self, _: SyncLand) -> Result<LandOutput> { self.err() }
+    async fn pull(&self, _: ViewPull) -> Result<PullOutput> { self.err() }
 }
 
 #[async_trait]

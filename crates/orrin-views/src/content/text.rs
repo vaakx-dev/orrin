@@ -13,6 +13,11 @@ pub fn lines(text: &str, offset: Option<u32>, limit: Option<u32>) -> (String, u3
     (picked, all.len() as u32)
 }
 
+pub fn with_line_ends(old: Option<&[u8]>, text: String) -> String {
+    let crlf = old.is_some_and(|old| old.windows(2).any(|pair| pair == b"\r\n"));
+    if crlf && !text.contains('\r') { text.replace('\n', "\r\n") } else { text }
+}
+
 pub fn apply(text: &str, edits: &[TextEdit]) -> Result<String> {
     let crlf = text.contains("\r\n");
     edits.iter().try_fold(text.to_string(), |current, edit| apply_one(&current, edit, crlf))

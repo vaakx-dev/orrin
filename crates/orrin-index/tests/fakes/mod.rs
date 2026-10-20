@@ -219,6 +219,9 @@ impl Views for FolderViews {
     async fn advance(&self, _: &ViewId, _: &SnapshotId) -> Result<Vec<String>> {
         nope()
     }
+    async fn pull(&self, _: &ViewId, _: &SnapshotId, _: &Edits) -> Result<Pulled> {
+        nope()
+    }
     async fn take(&self, _: &ViewId, _: &SnapshotId, _: &Edits) -> Result<Vec<String>> {
         nope()
     }

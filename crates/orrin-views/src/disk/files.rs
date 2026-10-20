@@ -32,6 +32,16 @@ pub fn remove_any(path: &Path) {
     let _ = if path.is_dir() { fs::remove_dir_all(path) } else { fs::remove_file(path) };
 }
 
+pub fn retired(root: &Path) -> PathBuf {
+    root.with_extension("landed")
+}
+
+pub fn retire(root: &Path) {
+    if let Err(err) = fs::rename(root, retired(root)) {
+        tracing::warn!("could not move landed view folder {} aside: {err}", root.display());
+    }
+}
+
 fn replace(tmp: &Path, path: &Path) -> Result<()> {
     remove_if_present(path)?;
     fs::rename(tmp, path)?;
