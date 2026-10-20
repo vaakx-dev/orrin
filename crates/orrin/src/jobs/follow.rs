@@ -1,7 +1,7 @@
 use anyhow::bail;
 use futures_util::StreamExt;
-use orrin_core::api::{Event, EventEnvelope, JobLogs, JobRef, JobStatus};
 use orrin_core::JobId;
+use orrin_core::api::{Event, EventEnvelope, JobLogs, JobRef, JobStatus};
 use orrin_core::model::{Job, JobState, LogLine, Stream};
 use tokio_tungstenite::tungstenite::Message;
 
