@@ -1,8 +1,7 @@
 use async_trait::async_trait;
 
 use crate::api::{
-    Log, LogOutput, ProjectOpened, ProjectRemoved, ProjectsCreate, ProjectsListOutput, ProjectsRemove,
-    ProjectsSettings,
+    Log, LogOutput, ProjectOpened, ProjectRemoved, ProjectsCreate, ProjectsListOutput, ProjectsRemove, ProjectsSettings,
 };
 use crate::error::{Error, Result};
 use crate::id::{ChangeId, ProjectId};

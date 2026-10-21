@@ -1,6 +1,6 @@
 [targets.check]
 inputs = ["Cargo.toml", "Cargo.lock", "rustfmt.toml", "crates/**"]
-command = "cargo clippy --workspace --all-targets -- -D warnings"
+command = "cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings"
 needs = ["cargo"]
 cpu = 12
 warm = true
