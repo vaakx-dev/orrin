@@ -16,6 +16,7 @@ pub trait Index: Service {
     async fn locate(&self, input: Where) -> Result<WhereOutput>;
     async fn touched(&self, project: &ProjectId, view: Option<&ViewId>, paths: &[String]) -> Result<Clock>;
     async fn clock(&self, project: &ProjectId, view: Option<&ViewId>) -> Clock;
+    async fn remove_project(&self, _project: &ProjectId) {}
     async fn read_anchor(&self, _input: Read) -> Result<ReadOutput> {
         Err(Error::unavailable("document text is unavailable"))
     }

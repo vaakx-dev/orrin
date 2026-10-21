@@ -47,6 +47,7 @@ async fn run(cli: Cli) -> anyhow::Result<Outcome> {
         Command::Status => pcs::status(&api).await,
         Command::Projects => projects::list(&api).await,
         Command::Import { folder, name } => projects::import(&api, folder, name).await,
+        Command::Remove { project, delete_folder } => projects::remove(&api, &project, delete_folder).await,
         Command::Views { project } => projects::views(&api, project.as_deref()).await,
         Command::View(ViewCommand::New { project, owner, claim, from }) => {
             projects::create_view(&api, project.as_deref(), owner, claim, from).await

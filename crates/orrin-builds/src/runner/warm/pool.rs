@@ -73,6 +73,10 @@ impl Pool {
         Some(self.take(root, folders, number, 0, count))
     }
 
+    pub fn forget_under(&self, dir: &Path) {
+        self.0.roots.lock().unwrap().retain(|root, _| !root.starts_with(dir));
+    }
+
     fn try_lease(&self, root: &Path, files: &[Entry], size: usize) -> Option<Lease> {
         let mut roots = self.0.roots.lock().unwrap();
         let folders = folders(&mut roots, root);

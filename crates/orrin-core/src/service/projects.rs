@@ -1,7 +1,10 @@
 use async_trait::async_trait;
 
-use crate::api::{Log, LogOutput, ProjectOpened, ProjectsCreate, ProjectsListOutput, ProjectsSettings};
-use crate::error::Result;
+use crate::api::{
+    Log, LogOutput, ProjectOpened, ProjectRemoved, ProjectsCreate, ProjectsListOutput, ProjectsRemove,
+    ProjectsSettings,
+};
+use crate::error::{Error, Result};
 use crate::id::{ChangeId, ProjectId};
 use crate::model::{Change, Project, ProjectSettings};
 use crate::service::Service;
@@ -19,4 +22,7 @@ pub trait Projects: Service {
     async fn change(&self, id: &ChangeId) -> Result<Change>;
     async fn pin(&self, id: &ChangeId, pinned: bool) -> Result<()>;
     async fn thin(&self, project: &ProjectId) -> Result<u32>;
+    async fn remove(&self, _input: ProjectsRemove) -> Result<ProjectRemoved> {
+        Err(Error::unavailable("removing projects is unavailable"))
+    }
 }

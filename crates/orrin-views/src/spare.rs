@@ -35,6 +35,11 @@ impl Spares {
     fn gate(&self, project: &ProjectId) -> Gate {
         self.0.lock().unwrap_or_else(|e| e.into_inner()).entry(project.clone()).or_default().clone()
     }
+
+    pub async fn remove(&self, project: &ProjectId) -> Option<Folder> {
+        let gate = self.0.lock().unwrap_or_else(|e| e.into_inner()).remove(project)?;
+        gate.lock().await.take()
+    }
 }
 
 impl Inner {
@@ -88,7 +93,7 @@ impl Inner {
         Ok(folder)
     }
 
-    fn spare_path(&self, id: &ViewId) -> PathBuf {
+    pub fn spare_path(&self, id: &ViewId) -> PathBuf {
         self.home.views().join(format!("{id}.spare"))
     }
 

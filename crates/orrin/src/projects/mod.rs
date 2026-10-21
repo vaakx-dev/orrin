@@ -3,7 +3,9 @@ mod show;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use orrin_core::api::{LandOutput, PcsList, ProjectsImport, ProjectsList, Undo, ViewCreate, ViewLand, ViewList};
+use orrin_core::api::{
+    LandOutput, PcsList, ProjectsImport, ProjectsList, ProjectsRemove, Undo, ViewCreate, ViewLand, ViewList,
+};
 use orrin_core::{ChangeId, PcId, ViewId};
 
 use crate::api::Api;
@@ -19,6 +21,12 @@ pub async fn list(api: &Api) -> anyhow::Result<Outcome> {
 pub async fn import(api: &Api, folder: PathBuf, name: Option<String>) -> anyhow::Result<Outcome> {
     let path = std::path::absolute(folder)?;
     api.show(&api.send(ProjectsImport { path, name }).await?, show::opened)?;
+    Ok(Outcome::Done)
+}
+
+pub async fn remove(api: &Api, project: &str, delete_folder: bool) -> anyhow::Result<Outcome> {
+    let project = api.project(Some(project)).await?.id;
+    api.show(&api.send(ProjectsRemove { project, delete_folder }).await?, show::removed)?;
     Ok(Outcome::Done)
 }
 

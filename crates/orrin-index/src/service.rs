@@ -79,6 +79,10 @@ impl Index for IndexService {
         self.engine.clock(project, view).await
     }
 
+    async fn remove_project(&self, project: &ProjectId) {
+        self.engine.remove_project(project);
+    }
+
     async fn read_anchor(&self, input: Read) -> Result<ReadOutput> {
         query::read_anchor(&self.engine, input).await
     }

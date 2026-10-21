@@ -12,7 +12,7 @@ use crate::plan::{Plan, Request};
 use crate::remote::{self, Place};
 use crate::roots;
 use crate::runner::steps::Records;
-use crate::{deliver, recover, runner, source};
+use crate::{deliver, recover, removal, runner, source};
 
 const CANCEL_WAIT: Duration = Duration::from_secs(5);
 const DAY_SECS: u64 = 24 * 60 * 60;
@@ -134,5 +134,9 @@ impl Builds for BuildService {
 
     async fn delivery(&self, project: &ProjectId) -> Result<Delivery> {
         self.ctx.deliveries.last(project)
+    }
+
+    async fn remove_project(&self, project: &ProjectId) -> Result<()> {
+        removal::remove_project(&self.ctx, project).await
     }
 }

@@ -24,6 +24,13 @@ impl Deliveries {
         last.get(project).cloned().ok_or_else(|| Error::not_found(format!("nothing was delivered for {project} yet")))
     }
 
+    pub fn remove(&self, project: &ProjectId) {
+        if let Some(task) = self.tasks.lock().unwrap_or_else(|e| e.into_inner()).remove(project) {
+            task.abort();
+        }
+        self.last.lock().unwrap_or_else(|e| e.into_inner()).remove(project);
+    }
+
     fn set(&self, ctx: &Context, delivery: &Delivery) {
         let mut last = self.last.lock().unwrap_or_else(|e| e.into_inner());
         last.insert(delivery.project.clone(), delivery.clone());

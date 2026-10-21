@@ -6,4 +6,5 @@ mod link;
 mod open;
 mod place;
 mod read;
+mod remove;
 mod write;

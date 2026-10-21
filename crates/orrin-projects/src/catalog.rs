@@ -1,19 +1,25 @@
-use orrin_core::api::{Event, Log, LogOutput, ProjectOpened, ProjectsCreate, ProjectsListOutput, ProjectsSettings};
+use std::path::PathBuf;
+
+use orrin_core::api::{
+    Event, Log, LogOutput, ProjectOpened, ProjectRemoved, ProjectsCreate, ProjectsListOutput, ProjectsRemove,
+    ProjectsSettings, ViewList,
+};
 use orrin_core::config::HistoryConfig;
-use orrin_core::model::{Change, Project, ProjectSettings, Snapshot, clean_path};
+use orrin_core::model::{Change, Project, ProjectSettings, Snapshot, ViewKind, clean_path};
 use orrin_core::service::{Hub, Projects, Service, Setup};
-use orrin_core::{ChangeId, Error, Events, PcId, ProjectId, Result, now_ms};
+use orrin_core::{ChangeId, Error, Events, Home, PcId, ProjectId, Result, now_ms};
 
 use crate::change_rows::{self, LogQuery};
 use crate::db::Db;
 use crate::swap::swap_main;
-use crate::{project_rows, thin};
+use crate::{folder, project_rows, thin};
 
 const LOG_LIMIT: u32 = 50;
 
 pub struct Catalog {
     db: Db,
     hub: Hub,
+    home: Home,
     events: Events,
     me: PcId,
     history: HistoryConfig,
@@ -24,6 +30,7 @@ impl Catalog {
         Ok(Self {
             db: Db::open(&setup.home.db())?,
             hub: setup.hub.clone(),
+            home: setup.home.clone(),
             events: setup.events.clone(),
             me: setup.me.pc.clone(),
             history: setup.config.history.clone(),
@@ -59,6 +66,16 @@ impl Catalog {
         let project = self.get(&project.id).await?;
         let files = self.hub.store.snapshot(&project.main)?.entries.len() as u64;
         Ok(ProjectOpened { project, view: Some(view), files })
+    }
+
+    async fn deletable_folders(&self, project: &ProjectId) -> Result<Vec<PathBuf>> {
+        let views = self.hub.views.list(ViewList { project: Some(project.clone()) }).await?.views;
+        let folders: Vec<PathBuf> = views.into_iter().filter(|v| v.kind == ViewKind::User).map(|v| v.path).collect();
+        let home = folder::user_home();
+        for path in &folders {
+            folder::check_deletable(path, self.home.root(), home.as_deref())?;
+        }
+        Ok(folders)
     }
 }
 
@@ -148,6 +165,28 @@ impl Projects for Catalog {
             return Err(Error::not_found(format!("no change {id}")));
         }
         Ok(())
+    }
+
+    async fn remove(&self, input: ProjectsRemove) -> Result<ProjectRemoved> {
+        let project = self.get(&input.project).await?;
+        let folders = match input.delete_folder {
+            true => self.deletable_folders(&project.id).await?,
+            false => Vec::new(),
+        };
+        self.hub.builds.remove_project(&project.id).await?;
+        let views = self.hub.views.remove_project(&project.id).await?;
+        self.hub.index.remove_project(&project.id).await;
+        self.db.run(|conn| {
+            let tx = conn.transaction()?;
+            change_rows::delete_project(&tx, &project.id)?;
+            project_rows::delete(&tx, &project.id)?;
+            tx.commit()
+        })?;
+        for path in &folders {
+            folder::delete(path.clone()).await?;
+        }
+        self.events.emit(Event::ProjectRemoved { project: project.id.clone() });
+        Ok(ProjectRemoved { project, views, deleted_folders: folders })
     }
 
     async fn thin(&self, project: &ProjectId) -> Result<u32> {

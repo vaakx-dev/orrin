@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use orrin_core::api::{Event, Log, ProjectsCreate, ProjectsSettings};
+use orrin_core::api::{Event, Log, ProjectsCreate, ProjectsRemove, ProjectsSettings};
 use orrin_core::model::{Change, FileState, ProjectSettings};
 use orrin_core::service::{GcReport, Hub, Materialise, Projects, Service, Services, Setup, Store, Unavailable};
 use orrin_core::{ChangeId, Config, ErrorCode, Events, Hash, Home, Identity, Result, SnapshotId};
@@ -162,4 +162,23 @@ async fn swaps_main_only_from_the_expected_parent() {
     assert_eq!(in_src[0].id, first.id);
     let older = Log { before: Some(second.id.clone()), ..log(None) };
     assert_eq!(projects.log(older).await.unwrap().changes.len(), 1);
+}
+
+#[tokio::test]
+async fn removes_the_project_and_its_changes() {
+    let dir = tempfile::tempdir().unwrap();
+    let setup = setup(dir.path());
+    let projects = wire(&setup);
+    let project = projects.create(create("game")).await.unwrap().project;
+    let first = change(&project.id, &project.main, "a.txt");
+    projects.swap_main(first.clone()).await.unwrap();
+    let mut events = setup.events.subscribe();
+
+    let removed = projects.remove(ProjectsRemove { project: project.id.clone(), delete_folder: false }).await.unwrap();
+    assert!(removed.deleted_folders.is_empty());
+    assert!(matches!(events.recv().await.unwrap().event, Event::ProjectRemoved { .. }));
+    assert_eq!(projects.get(&project.id).await.unwrap_err().code, ErrorCode::NotFound);
+    assert_eq!(projects.change(&first.id).await.unwrap_err().code, ErrorCode::NotFound);
+    let again = ProjectsRemove { project: project.id, delete_folder: false };
+    assert_eq!(projects.remove(again).await.unwrap_err().code, ErrorCode::NotFound);
 }

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use orrin_core::PcId;
-use orrin_core::api::{LandOutput, ProjectOpened};
+use orrin_core::api::{LandOutput, ProjectOpened, ProjectRemoved};
 use orrin_core::model::{Project, View, ViewKind, ViewState};
 
 use crate::table::{Table, ago, short};
@@ -18,6 +18,15 @@ pub fn projects(projects: &[Project], pcs: &HashMap<PcId, String>) -> String {
 pub fn opened(out: &ProjectOpened) -> String {
     let place = out.view.as_ref().map(|v| format!(" at {}", v.path.display())).unwrap_or_default();
     format!("Imported {} ({}): {} files{place}", out.project.name, out.project.id, out.files)
+}
+
+pub fn removed(out: &ProjectRemoved) -> String {
+    let mut lines = vec![format!("Removed {} ({}) and {} views", out.project.name, out.project.id, out.views)];
+    match out.deleted_folders.as_slice() {
+        [] => lines.push("Your folder on disk was left alone.".to_string()),
+        folders => lines.extend(folders.iter().map(|f| format!("  deleted folder {}", f.display()))),
+    }
+    lines.join("\n")
 }
 
 pub fn views(views: &[View]) -> String {

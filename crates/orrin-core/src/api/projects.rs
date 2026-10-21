@@ -51,6 +51,22 @@ pub struct ProjectsSettings {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct ProjectsRemove {
+    pub project: ProjectId,
+    #[serde(default)]
+    pub delete_folder: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProjectRemoved {
+    pub project: Project,
+    pub views: u32,
+    pub deleted_folders: Vec<PathBuf>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Log {
     pub project: ProjectId,
     #[serde(default)]

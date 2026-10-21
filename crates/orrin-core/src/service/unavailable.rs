@@ -77,6 +77,7 @@ impl Views for Unavailable {
     async fn landed(&self, _: &ViewId, _: Option<&ChangeId>) -> Result<()> { self.err() }
     async fn link(&self, _: &ProjectId, _: Linked) -> Result<()> { Ok(()) }
     async fn deliver(&self, _: &ProjectId, _: Vec<Artifact>) -> Result<Delivered> { self.err() }
+    async fn remove_project(&self, _: &ProjectId) -> Result<u32> { Ok(0) }
 }
 
 #[async_trait]
@@ -119,6 +120,7 @@ impl Builds for Unavailable {
     async fn linked(&self, _: &ProjectId) -> Result<Vec<Linked>> { Ok(Vec::new()) }
     async fn deliver(&self, _: &ProjectId) -> Result<Delivery> { self.err() }
     async fn delivery(&self, _: &ProjectId) -> Result<Delivery> { self.err() }
+    async fn remove_project(&self, _: &ProjectId) -> Result<()> { Ok(()) }
 }
 
 #[async_trait]

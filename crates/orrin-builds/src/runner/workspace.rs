@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use orrin_core::model::{Entry, Snapshot, Stream};
-use orrin_core::{Hash, JobId, Result};
+use orrin_core::{Hash, JobId, ProjectId, Result};
 
 use super::folder;
 use super::warm::{Carried, Lease};
@@ -103,7 +103,11 @@ impl Workspace {
 }
 
 fn warm_root(ctx: &Context, plan: &Plan, target: &str) -> PathBuf {
-    ctx.home.root().join("warm").join(plan.project.as_str()).join(safe(target))
+    warm_dir(ctx, &plan.project).join(safe(target))
+}
+
+pub fn warm_dir(ctx: &Context, project: &ProjectId) -> PathBuf {
+    ctx.home.root().join("warm").join(project.as_str())
 }
 
 fn safe(name: &str) -> String {

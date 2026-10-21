@@ -36,6 +36,7 @@ fn projects(r: &mut Registry) {
     r.add(|h: Hub, i: api::ProjectsCreate| async move { h.projects.create(i).await });
     r.add(|h: Hub, i: api::ProjectsImport| async move { h.views.import(i).await });
     r.add(|h: Hub, i: api::ProjectsSettings| async move { h.projects.settings(i).await });
+    r.add(|h: Hub, i: api::ProjectsRemove| async move { h.projects.remove(i).await });
     r.add(|h: Hub, i: api::Log| async move { h.projects.log(i).await });
     r.add(|h: Hub, i: api::GitExport| async move { h.git.export(i).await });
     r.add(|h: Hub, i: api::GitImport| async move { h.git.import(i).await });

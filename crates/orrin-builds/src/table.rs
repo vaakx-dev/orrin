@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use orrin_core::api::{Event, JobLogsOutput};
 use orrin_core::model::{Artifact, Job, JobState, LogLine, Stream};
-use orrin_core::{Error, Events, Hash, JobId, Result, now_ms};
+use orrin_core::{Error, Events, Hash, JobId, ProjectId, Result, now_ms};
 use tokio::sync::{Notify, watch};
 
 use crate::journal::{Journal, Saved};
@@ -133,6 +133,17 @@ impl Table {
         if let Some(entry) = self.inner.lock().unwrap().entries.get_mut(id) {
             entry.artifacts = artifacts;
         }
+    }
+
+    pub fn remove_project(&self, project: &ProjectId) {
+        let ids: Vec<JobId> = {
+            let mut inner = self.inner.lock().unwrap();
+            let ids: Vec<JobId> =
+                inner.entries.values().filter(|e| e.job.project == *project).map(|e| e.job.id.clone()).collect();
+            ids.iter().for_each(|id| _ = inner.entries.remove(id));
+            ids
+        };
+        self.journal.remove(&ids);
     }
 
     pub fn job(&self, id: &JobId) -> Result<Job> {

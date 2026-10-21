@@ -384,3 +384,18 @@ async fn delivered_outputs_are_real_files_with_their_mtimes_and_stay_out_of_chan
     assert_eq!((done.copied, done.busy.len()), (1, 0));
     assert_eq!(std::fs::read_to_string(&dll).unwrap(), "v2");
 }
+
+#[tokio::test]
+async fn removing_a_project_deletes_worker_folders_but_keeps_the_user_folder() {
+    let rig = Rig::new(1 << 20);
+    let opened = import(&rig, &[("a.txt", "hello\n")]).await;
+    let project = opened.project.id.clone();
+    let user = opened.view.unwrap();
+    let agent = worker(&rig, &project).await;
+
+    assert_eq!(rig.views.remove_project(&project).await.unwrap(), 2);
+    assert!(!agent.path.exists());
+    assert_eq!(std::fs::read_to_string(user.path.join("a.txt")).unwrap(), "hello\n");
+    assert!(rig.views.list(ViewList { project: Some(project) }).await.unwrap().views.is_empty());
+    assert!(rig.views.get(&user.id).await.is_err());
+}

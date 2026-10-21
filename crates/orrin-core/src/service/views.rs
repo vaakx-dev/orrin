@@ -7,7 +7,7 @@ use crate::api::{
     Changes, ChangesOutput, Create, Delete, Diff, DiffOutput, Done, Move, Patch, ProjectOpened, ProjectsImport, Read,
     ReadOutput, Touched, ViewCreate, ViewDrop, ViewList, ViewListOutput, Written,
 };
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::id::{ChangeId, ProjectId, SnapshotId, ViewId};
 use crate::model::{Artifact, Delivered, FileState, Linked, View};
 use crate::service::Service;
@@ -42,4 +42,7 @@ pub trait Views: Service {
     async fn landed(&self, id: &ViewId, change: Option<&ChangeId>) -> Result<()>;
     async fn link(&self, project: &ProjectId, linked: Linked) -> Result<()>;
     async fn deliver(&self, project: &ProjectId, files: Vec<Artifact>) -> Result<Delivered>;
+    async fn remove_project(&self, _project: &ProjectId) -> Result<u32> {
+        Err(Error::unavailable("removing a project's views is unavailable"))
+    }
 }

@@ -117,6 +117,10 @@ impl Engine {
         }
     }
 
+    pub fn remove_project(&self, project: &ProjectId) {
+        self.projects().remove(project);
+    }
+
     fn index(&self, project: &ProjectId) -> Arc<ProjectIndex> {
         self.projects().entry(project.clone()).or_default().clone()
     }

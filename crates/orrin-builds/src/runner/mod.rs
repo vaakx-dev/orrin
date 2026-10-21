@@ -24,6 +24,7 @@ use crate::queue::{Need, Slot};
 use crate::table::Claim;
 use crate::tools::{self, Tools};
 pub use folder::SCREENSHOTS;
+pub use workspace::warm_dir;
 use packages::Placed;
 use placeholders::Values;
 use workspace::Workspace;

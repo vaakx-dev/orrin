@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 
 use crate::api::{JobArtifactsOutput, JobInput, JobList, JobListOutput, JobLogs, JobLogsOutput, JobRef, SyncJob};
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::id::{Hash, ProjectId};
 use crate::model::{Delivery, Job, JobKind, Linked};
 use crate::service::Service;
@@ -20,4 +20,7 @@ pub trait Builds: Service {
     async fn linked(&self, project: &ProjectId) -> Result<Vec<Linked>>;
     async fn deliver(&self, project: &ProjectId) -> Result<Delivery>;
     async fn delivery(&self, project: &ProjectId) -> Result<Delivery>;
+    async fn remove_project(&self, _project: &ProjectId) -> Result<()> {
+        Err(Error::unavailable("removing a project's builds is unavailable"))
+    }
 }

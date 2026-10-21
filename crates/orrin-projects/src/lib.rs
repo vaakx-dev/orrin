@@ -1,6 +1,7 @@
 mod catalog;
 mod change_rows;
 mod db;
+mod folder;
 mod project_rows;
 mod swap;
 mod thin;

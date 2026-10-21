@@ -41,6 +41,7 @@ requests! {
     ProjectsCreate => "projects.create": ProjectOpened,
     ProjectsImport => "projects.import": ProjectOpened,
     ProjectsSettings => "projects.settings": ProjectSettings,
+    ProjectsRemove => "projects.remove": ProjectRemoved,
     Log => "log": LogOutput,
     Find => "find": FindOutput,
     Search => "search": SearchOutput,

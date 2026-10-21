@@ -9,6 +9,8 @@ use crate::model::{Conflict, Delivery, Job, LogLine, Pc, Project};
 pub enum Event {
     #[serde(rename = "project.created")]
     ProjectCreated { project: Project },
+    #[serde(rename = "project.removed")]
+    ProjectRemoved { project: ProjectId },
     #[serde(rename = "main.moved")]
     MainMoved { project: ProjectId, main: SnapshotId, change: ChangeId },
     #[serde(rename = "view.changed")]

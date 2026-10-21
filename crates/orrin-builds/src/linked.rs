@@ -38,6 +38,14 @@ impl Links {
         Ok(true)
     }
 
+    pub fn remove(&self, project: &ProjectId) -> Result<()> {
+        let _held = self.lock.lock().unwrap_or_else(|e| e.into_inner());
+        match std::fs::remove_file(self.path(project)) {
+            Err(err) if err.kind() != std::io::ErrorKind::NotFound => Err(err.into()),
+            _ => Ok(()),
+        }
+    }
+
     pub fn roots(&self) -> Vec<Hash> {
         let entries = std::fs::read_dir(&self.dir).into_iter().flatten().flatten();
         let files = entries.filter_map(|entry| std::fs::read(entry.path()).ok());

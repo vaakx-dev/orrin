@@ -64,6 +64,11 @@ pub fn dated(conn: &Connection, project: &ProjectId) -> rusqlite::Result<Vec<Dat
     rows.collect()
 }
 
+pub fn delete_project(conn: &Connection, project: &ProjectId) -> rusqlite::Result<()> {
+    conn.execute("DELETE FROM changes WHERE project = ?1", [project.as_str()])?;
+    Ok(())
+}
+
 pub fn delete(conn: &Connection, id: &ChangeId) -> rusqlite::Result<()> {
     conn.execute("DELETE FROM changes WHERE id = ?1", [id.as_str()])?;
     Ok(())

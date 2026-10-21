@@ -72,6 +72,14 @@ impl Journal {
         self.write("UPDATE build_jobs SET remote = ?2 WHERE id = ?1", params![id.as_str(), remote.as_str()]);
     }
 
+    pub fn remove(&self, ids: &[JobId]) {
+        self.flush();
+        for id in ids {
+            self.write("DELETE FROM build_logs WHERE job = ?1", params![id.as_str()]);
+            self.write("DELETE FROM build_jobs WHERE id = ?1", params![id.as_str()]);
+        }
+    }
+
     pub fn log(&self, id: &JobId, line: &LogLine) {
         let full = {
             let mut pending = self.pending.lock().unwrap();

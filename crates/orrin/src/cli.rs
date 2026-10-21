@@ -33,6 +33,12 @@ pub enum Command {
         #[arg(long)]
         name: Option<String>,
     },
+    #[command(about = "Forget a project on this PC; its own folder stays unless --delete-folder")]
+    Remove {
+        project: String,
+        #[arg(long, help = "Also delete the project's user folder from disk")]
+        delete_folder: bool,
+    },
     Views {
         project: Option<String>,
     },

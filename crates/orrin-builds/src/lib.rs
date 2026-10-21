@@ -11,6 +11,7 @@ mod process;
 mod queue;
 mod recover;
 mod remote;
+mod removal;
 mod roots;
 mod runner;
 mod service;

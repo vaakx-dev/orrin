@@ -147,4 +147,8 @@ impl Views for ViewsService {
     async fn deliver(&self, project: &ProjectId, files: Vec<Artifact>) -> Result<Delivered> {
         self.0.deliver(project, files).await
     }
+
+    async fn remove_project(&self, project: &ProjectId) -> Result<u32> {
+        self.0.remove_project(project).await
+    }
 }
